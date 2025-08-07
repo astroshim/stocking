@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.repositories.order_repository import OrderRepository
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
 from app.db.repositories.portfolio_repository import PortfolioRepository
+from app.services.transaction_service import TransactionService
 from app.db.models.order import Order, OrderStatus, OrderType, OrderMethod
 from app.db.models.portfolio import VirtualBalance
 from app.utils.transaction_manager import TransactionManager
@@ -20,6 +21,7 @@ class OrderService:
         self.order_repository = order_repository
         self.virtual_balance_repository = virtual_balance_repository
         self.portfolio_repository = PortfolioRepository(order_repository.session)
+        self.transaction_service = TransactionService(order_repository.session)
 
     def create_order(self, user_id: str, order_data: Dict[str, Any]) -> Order:
         """새로운 주문을 생성합니다."""
@@ -168,9 +170,12 @@ class OrderService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> Dict[str, Any]:
+        print("-----------> get_order_history")
         """주문 이력을 조회합니다."""
         orders = self.order_repository.get_order_history(user_id, page, size, start_date, end_date)
         total = self.order_repository.count_order_history(user_id, start_date, end_date)
+
+        print("-----------> orders", orders)
         
         return {
             'orders': orders,
@@ -209,6 +214,9 @@ class OrderService:
             
             # 포트폴리오 업데이트
             self._update_portfolio_for_execution(order, execution)
+            
+            # 거래 내역 생성
+            self._create_transaction_for_execution(order, execution)
             
             logging.info(f"Order executed: {order_id} for user {user_id}")
             return order
@@ -264,6 +272,7 @@ class OrderService:
         
         self._update_virtual_balance_for_execution(order, execution)
         self._update_portfolio_for_execution(order, execution)
+        self._create_transaction_for_execution(order, execution)
 
     def _get_current_price(self, stock_id: str) -> Decimal:
         """현재가를 조회합니다. (실제로는 외부 API 호출)"""
@@ -360,3 +369,25 @@ class OrderService:
                 raise ValidationError("Cannot sell stock not in portfolio")
         
         logging.info(f"Portfolio updated for execution: {order.id}, {order.order_type.value} {quantity} shares at {price}")
+
+    def _create_transaction_for_execution(self, order: Order, execution) -> None:
+        """체결에 따라 거래 내역을 생성합니다."""
+        from app.db.models.transaction import TransactionType
+        
+        # 거래 유형 변환
+        transaction_type = TransactionType.BUY if order.order_type == OrderType.BUY else TransactionType.SELL
+        
+        # 거래 내역 생성
+        transaction = self.transaction_service.create_transaction_from_order(
+            user_id=order.user_id,
+            order_id=order.id,
+            stock_id=order.stock_id,
+            transaction_type=transaction_type,
+            quantity=execution.execution_quantity,
+            price=execution.execution_price,
+            commission=order.commission,
+            tax=order.tax,
+            description=f"{order.order_type.value} 주문 체결: {execution.execution_quantity}주 @ {execution.execution_price}"
+        )
+        
+        logging.info(f"Transaction created for execution: {transaction.id}")

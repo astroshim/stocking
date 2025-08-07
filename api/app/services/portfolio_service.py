@@ -38,11 +38,8 @@ class PortfolioService:
         # 포트폴리오 데이터 변환
         portfolio_data = []
         for portfolio in paged_portfolios:
-            current_price = (
-                portfolio.stock.current_price.current_price 
-                if portfolio.stock.current_price 
-                else Decimal('0')
-            )
+            # TODO: 실제 주식 가격 및 정보 조회 필요
+            current_price = portfolio.average_price  # 임시로 평균 매수가 사용
             
             current_value = portfolio.current_quantity * current_price
             invested_amount = portfolio.current_quantity * portfolio.average_price
@@ -55,10 +52,10 @@ class PortfolioService:
             portfolio_data.append({
                 'id': portfolio.id,
                 'stock_id': portfolio.stock_id,
-                'stock_code': portfolio.stock.code,
-                'stock_name': portfolio.stock.name,
-                'market': portfolio.stock.market,
-                'sector': portfolio.stock.sector,
+                'stock_code': portfolio.stock_id,  # 임시로 stock_id 사용
+                'stock_name': f"주식 {portfolio.stock_id}",  # 임시 이름
+                'market': "KRX",  # 임시 값
+                'sector': "기타",  # 임시 값
                 'current_quantity': portfolio.current_quantity,
                 'average_price': float(portfolio.average_price),
                 'current_price': float(current_price),
@@ -118,11 +115,8 @@ class PortfolioService:
         if not portfolio:
             return None
         
-        current_price = (
-            portfolio.stock.current_price.current_price 
-            if portfolio.stock.current_price 
-            else Decimal('0')
-        )
+        # TODO: 실제 주식 가격 및 정보 조회 필요
+        current_price = portfolio.average_price  # 임시로 평균 매수가 사용
         
         current_value = portfolio.current_quantity * current_price
         invested_amount = portfolio.current_quantity * portfolio.average_price
@@ -135,12 +129,12 @@ class PortfolioService:
         return {
             'id': portfolio.id,
             'stock': {
-                'id': portfolio.stock.id,
-                'code': portfolio.stock.code,
-                'name': portfolio.stock.name,
-                'market': portfolio.stock.market,
-                'sector': portfolio.stock.sector,
-                'industry': portfolio.stock.industry,
+                'id': portfolio.stock_id,
+                'code': portfolio.stock_id,
+                'name': f"주식 {portfolio.stock_id}",  # 임시 이름
+                'market': "KRX",  # 임시 값
+                'sector': "기타",  # 임시 값
+                'industry': "기타",  # 임시 값
                 'current_price': float(current_price),
                 'price_change': 0,  # TODO: 전일대비 변동률 계산
                 'price_change_rate': 0

@@ -114,6 +114,105 @@ async def get_orders(
         raise HTTPException(status_code=500, detail=f"주문 목록 조회 실패: {str(e)}")
 
 
+@router.get("/orders/history", response_model=OrderListResponse, summary="주문 이력 조회")
+async def get_order_history(
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    size: int = Query(20, ge=1, le=100, description="페이지 크기"),
+    start_date: Optional[str] = Query(None, description="시작일 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="종료일 (YYYY-MM-DD)"),
+    current_user_id: str = Depends(get_current_user),
+    order_service: OrderService = Depends(get_order_service)
+):
+    """주문 이력을 조회합니다 (체결완료, 취소된 주문 포함)."""
+    try:
+        # 날짜 파싱
+        parsed_start_date = None
+        parsed_end_date = None
+
+        print("🔍 주문 내역 조회 시작")
+        print(f"👤 사용자 ID: {current_user_id}")
+        print(f"📄 페이지: {page}, 크기: {size}")
+        print(f"📅 시작일: {start_date}, 종료일: {end_date}")
+        
+        if start_date:
+            try:
+                parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD")
+        
+        if end_date:
+            try:
+                parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
+        
+        result = order_service.get_order_history(current_user_id, page, size, parsed_start_date, parsed_end_date)
+        
+        # 주문 응답 변환
+        order_responses = [OrderWithExecutionsResponse.model_validate(order) for order in result['orders']]
+        
+        # SimplePage로 변환
+        simple_page = SimplePage(
+            items=order_responses,
+            page=result['page'],
+            per_page=result['size'],
+            has_next=result['page'] < result['pages']
+        )
+        
+        paged_response = OrderListResponse.from_page_result(simple_page)
+        return create_response(paged_response.model_dump(), message="주문 이력 조회 성공")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"주문 이력 조회 실패: {str(e)}")
+
+@router.get("/orders/summary", response_model=OrderSummaryResponse, summary="주문 요약 정보")
+async def get_order_summary(
+    period_days: int = Query(30, ge=1, le=365, description="조회 기간 (일)"),
+    current_user_id: str = Depends(get_current_user),
+    order_service: OrderService = Depends(get_order_service)
+):
+    """지정된 기간의 주문 요약 정보를 조회합니다."""
+    try:
+        summary = order_service.get_order_summary(current_user_id, period_days)
+        summary_response = OrderSummaryResponse(**summary)
+        
+        return create_response(summary_response.model_dump(), message="주문 요약 정보 조회 성공")
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"주문 요약 정보 조회 실패: {str(e)}")
+
+
+@router.get("/orders/pending", response_model=OrderListResponse, summary="대기중인 주문 조회")
+async def get_pending_orders(
+    page: int = Query(1, ge=1, description="페이지 번호"),
+    size: int = Query(20, ge=1, le=100, description="페이지 크기"),
+    current_user_id: str = Depends(get_current_user),
+    order_service: OrderService = Depends(get_order_service)
+):
+    """현재 대기중인 주문들을 조회합니다."""
+    try:
+        result = order_service.get_pending_orders(current_user_id, page, size)
+        
+        # 주문 응답 변환
+        order_responses = [OrderWithExecutionsResponse.model_validate(order) for order in result['orders']]
+        
+        # SimplePage로 변환
+        simple_page = SimplePage(
+            items=order_responses,
+            page=result['page'],
+            per_page=result['size'],
+            has_next=result['page'] < result['pages']
+        )
+        
+        paged_response = OrderListResponse.from_page_result(simple_page)
+        return create_response(paged_response.model_dump(), message="대기중인 주문 조회 성공")
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"대기중인 주문 조회 실패: {str(e)}")
+
+
 @router.get("/orders/{order_id}", response_model=OrderWithExecutionsResponse, summary="주문 상세 조회")
 async def get_order(
     order_id: str,
@@ -194,53 +293,6 @@ async def cancel_order(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"주문 취소 실패: {str(e)}")
 
-
-@router.get("/orders/summary", response_model=OrderSummaryResponse, summary="주문 요약 정보")
-async def get_order_summary(
-    period_days: int = Query(30, ge=1, le=365, description="조회 기간 (일)"),
-    current_user_id: str = Depends(get_current_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """지정된 기간의 주문 요약 정보를 조회합니다."""
-    try:
-        summary = order_service.get_order_summary(current_user_id, period_days)
-        summary_response = OrderSummaryResponse(**summary)
-        
-        return create_response(summary_response.model_dump(), message="주문 요약 정보 조회 성공")
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"주문 요약 정보 조회 실패: {str(e)}")
-
-
-@router.get("/orders/pending", response_model=OrderListResponse, summary="대기중인 주문 조회")
-async def get_pending_orders(
-    page: int = Query(1, ge=1, description="페이지 번호"),
-    size: int = Query(20, ge=1, le=100, description="페이지 크기"),
-    current_user_id: str = Depends(get_current_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """현재 대기중인 주문들을 조회합니다."""
-    try:
-        result = order_service.get_pending_orders(current_user_id, page, size)
-        
-        # 주문 응답 변환
-        order_responses = [OrderWithExecutionsResponse.model_validate(order) for order in result['orders']]
-        
-        # SimplePage로 변환
-        simple_page = SimplePage(
-            items=order_responses,
-            page=result['page'],
-            per_page=result['size'],
-            has_next=result['page'] < result['pages']
-        )
-        
-        paged_response = OrderListResponse.from_page_result(simple_page)
-        return create_response(paged_response.model_dump(), message="대기중인 주문 조회 성공")
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"대기중인 주문 조회 실패: {str(e)}")
-
-
 @router.post("/orders/{order_id}/execute", summary="주문 강제 체결")
 async def execute_order(
     order_id: str,
@@ -268,50 +320,3 @@ async def execute_order(
         raise HTTPException(status_code=500, detail=f"주문 체결 실패: {str(e)}")
 
 
-@router.get("/orders/history", response_model=OrderListResponse, summary="주문 이력 조회")
-async def get_order_history(
-    page: int = Query(1, ge=1, description="페이지 번호"),
-    size: int = Query(20, ge=1, le=100, description="페이지 크기"),
-    start_date: Optional[str] = Query(None, description="시작일 (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="종료일 (YYYY-MM-DD)"),
-    current_user_id: str = Depends(get_current_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """주문 이력을 조회합니다 (체결완료, 취소된 주문 포함)."""
-    try:
-        # 날짜 파싱
-        parsed_start_date = None
-        parsed_end_date = None
-        
-        if start_date:
-            try:
-                parsed_start_date = datetime.strptime(start_date, "%Y-%m-%d")
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid start_date format. Use YYYY-MM-DD")
-        
-        if end_date:
-            try:
-                parsed_end_date = datetime.strptime(end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
-        
-        result = order_service.get_order_history(current_user_id, page, size, parsed_start_date, parsed_end_date)
-        
-        # 주문 응답 변환
-        order_responses = [OrderWithExecutionsResponse.model_validate(order) for order in result['orders']]
-        
-        # SimplePage로 변환
-        simple_page = SimplePage(
-            items=order_responses,
-            page=result['page'],
-            per_page=result['size'],
-            has_next=result['page'] < result['pages']
-        )
-        
-        paged_response = OrderListResponse.from_page_result(simple_page)
-        return create_response(paged_response.model_dump(), message="주문 이력 조회 성공")
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"주문 이력 조회 실패: {str(e)}")

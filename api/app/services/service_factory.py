@@ -58,6 +58,12 @@ def order_service_factory(db: Session = None):
     virtual_balance_repository = VirtualBalanceRepository(db)
     return OrderService(order_repository, virtual_balance_repository)
 
+
+def transaction_service_factory(db: Session = None):
+    """TransactionService 인스턴스 생성을 위한 팩토리 함수"""
+    from app.services.transaction_service import TransactionService
+    return TransactionService(db)
+
 # def get_s3_service(
 #         bucket_name: str = None,
 #         storage_domain: str = None,

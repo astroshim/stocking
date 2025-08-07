@@ -9,7 +9,8 @@ from app.services.service_factory import (
     notice_service_factory,
     payment_service_factory,
     portfolio_service_factory,
-    order_service_factory
+    order_service_factory,
+    transaction_service_factory
 )
 
 
@@ -51,4 +52,9 @@ def get_portfolio_service(db: Session = Depends(get_db)):
 
 def get_order_service(db: Session = Depends(get_db)):
     """OrderService dependency"""
-    return order_service_factory(db) 
+    return order_service_factory(db)
+
+
+def get_transaction_service(db: Session = Depends(get_db)):
+    """TransactionService dependency"""
+    return transaction_service_factory(db) 

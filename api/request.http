@@ -355,8 +355,23 @@ GET http://localhost:5100/api/v1/trading/orders/pending?page=1&size=10
 Authorization: Bearer {{access_token}}
 
 ###
-# 주문 이력 조회
-GET http://localhost:5100/api/v1/trading/orders/history?start_date=2025-01-01&end_date=2025-01-07
+# 주문 이력 조회 (전체 기간)
+GET http://localhost:5100/api/v1/trading/orders/history
+Authorization: Bearer {{access_token}}
+
+###
+# 주문 이력 조회 (특정 기간)
+GET http://localhost:5100/api/v1/trading/orders/history?start_date=2025-08-01&end_date=2025-08-31
+Authorization: Bearer {{access_token}}
+
+###
+# 주문 이력 조회 (디버깅 - 페이징 확인)
+GET http://localhost:5100/api/v1/trading/orders/history?page=1&size=5
+Authorization: Bearer {{access_token}}
+
+###
+# 모든 주문 조회 (상태 무관)
+GET http://localhost:5100/api/v1/trading/orders?page=1&size=10
 Authorization: Bearer {{access_token}}
 
 ###

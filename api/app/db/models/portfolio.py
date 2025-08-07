@@ -14,9 +14,10 @@ class Portfolio(UUIDMixin, Base):
     stock_id = Column(String(20), nullable=False, comment='주식 종목 코드 (예: 097230)')
     
     # 보유 수량 및 가격 정보
-    quantity = Column(Numeric(20, 0), nullable=False, default=0, comment='보유 수량')
-    average_buy_price = Column(Numeric(10, 2), nullable=False, comment='평균 매수가')
-    total_buy_amount = Column(Numeric(20, 2), nullable=False, comment='총 매수금액')
+    current_quantity = Column(Numeric(20, 0), nullable=False, default=0, comment='현재 보유 수량')
+    total_quantity = Column(Numeric(20, 0), nullable=False, default=0, comment='총 매수 수량')
+    average_price = Column(Numeric(10, 2), nullable=False, comment='평균 매수가')
+    total_invested_amount = Column(Numeric(20, 2), nullable=False, comment='총 투자금액')
     
     # 손익 정보
     current_value = Column(Numeric(20, 2), nullable=True, comment='현재 평가금액')
@@ -40,7 +41,7 @@ class Portfolio(UUIDMixin, Base):
     user = relationship('User', back_populates='portfolios')
 
     def __repr__(self):
-        return f'<Portfolio {self.user_id}: {self.quantity} shares of {self.stock_id}>'
+        return f'<Portfolio {self.user_id}: {self.current_quantity} shares of {self.stock_id}>'
 
 
 class VirtualBalance(UUIDMixin, Base):
