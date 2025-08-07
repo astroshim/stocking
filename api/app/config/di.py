@@ -7,13 +7,10 @@ from app.services.service_factory import (
     report_service_factory,
     comment_service_factory,
     notice_service_factory,
-    payment_service_factory
+    payment_service_factory,
+    portfolio_service_factory,
+    order_service_factory
 )
-from app.db.repositories.routine_marketing_repository import RoutineMarketingRepository
-from app.services.routine_marketing_service import RoutineMarketingService
-from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
-from app.services.portfolio_service import PortfolioService
-from functools import lru_cache
 
 
 def get_user_service(db: Session = Depends(get_db)):
@@ -46,13 +43,12 @@ def get_payment_service(db: Session = Depends(get_db)):
     return payment_service_factory(db)
 
 
-def get_routine_marketing_service(db: Session = Depends(get_db)):
-    """RoutineMarketingService dependency"""
-    repository = RoutineMarketingRepository(db)
-    return RoutineMarketingService(repository)
-
 
 def get_portfolio_service(db: Session = Depends(get_db)):
     """PortfolioService dependency"""
-    virtual_balance_repository = VirtualBalanceRepository(db)
-    return PortfolioService(virtual_balance_repository) 
+    return portfolio_service_factory(db)
+
+
+def get_order_service(db: Session = Depends(get_db)):
+    """OrderService dependency"""
+    return order_service_factory(db) 

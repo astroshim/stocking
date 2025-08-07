@@ -41,6 +41,23 @@ def notice_service_factory(db: Session = None):
     from app.services.notice_service import NoticeService
     return NoticeService(NoticeRepository(db))
 
+
+def portfolio_service_factory(db: Session = None):
+    """PortfolioService 인스턴스 생성을 위한 팩토리 함수"""
+    from app.services.portfolio_service import PortfolioService
+    return PortfolioService(db)
+
+
+def order_service_factory(db: Session = None):
+    """OrderService 인스턴스 생성을 위한 팩토리 함수"""
+    from app.db.repositories.order_repository import OrderRepository
+    from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
+    from app.services.order_service import OrderService
+    
+    order_repository = OrderRepository(db)
+    virtual_balance_repository = VirtualBalanceRepository(db)
+    return OrderService(order_repository, virtual_balance_repository)
+
 # def get_s3_service(
 #         bucket_name: str = None,
 #         storage_domain: str = None,

@@ -8,7 +8,6 @@ from app.utils.error_handlers import register_error_handlers
 from app.middleware.response_middleware import StandardResponseMiddleware
 from app.api.v1.endpoints import (
     user_controller,
-    routine_marketing_controller,
 )
 
 def create_app():
