@@ -6,7 +6,6 @@ from enum import Enum
 
 from app.api.schemas.common_pagenation import PagedResponse
 from app.api.schemas.init_var_model import InitVarModel
-from app.api.v1.schemas.stock_schema import StockResponse
 
 
 class BalanceChangeTypeEnum(str, Enum):
@@ -40,7 +39,7 @@ class PortfolioResponse(InitVarModel):
 
 
 class PortfolioWithStockResponse(PortfolioResponse):
-    stock: StockResponse = Field(..., description="주식 종목 정보")
+    stock_name: Optional[str] = Field(None, description="주식 종목명")
     current_price: Optional[Decimal] = Field(None, description="현재가")
 
 
@@ -156,7 +155,7 @@ class WatchListResponse(InitVarModel):
 
 
 class WatchListWithStockResponse(WatchListResponse):
-    stock: StockResponse = Field(..., description="주식 종목 정보")
+    stock_name: Optional[str] = Field(None, description="주식 종목명")
     current_price: Optional[Decimal] = Field(None, description="현재가")
     price_change: Optional[Decimal] = Field(None, description="가격 변동")
     price_change_rate: Optional[Decimal] = Field(None, description="변동률")

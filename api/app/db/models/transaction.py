@@ -23,7 +23,7 @@ class Transaction(UUIDMixin, Base):
     __tablename__ = 'transactions'
 
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, comment='사용자 ID')
-    stock_id = Column(String(36), ForeignKey('stocks.id'), nullable=True, comment='주식 종목 ID (주식 거래시)')
+    stock_id = Column(String(20), nullable=True, comment='주식 종목 코드 (주식 거래시, 예: 097230)')
     order_id = Column(String(36), ForeignKey('orders.id'), nullable=True, comment='주문 ID (주문 관련 거래시)')
     
     transaction_type = Column(SQLEnum(TransactionType), nullable=False, comment='거래 유형')
@@ -54,7 +54,6 @@ class Transaction(UUIDMixin, Base):
 
     # 관계 설정
     user = relationship('User', back_populates='transactions')
-    stock = relationship('Stock', back_populates='transactions')
     order = relationship('Order', back_populates='transactions')
 
     def __repr__(self):
@@ -109,7 +108,7 @@ class WatchList(UUIDMixin, Base):
     __tablename__ = 'watch_lists'
 
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, comment='사용자 ID')
-    stock_id = Column(String(36), ForeignKey('stocks.id'), nullable=False, comment='주식 종목 ID')
+    stock_id = Column(String(20), nullable=False, comment='주식 종목 코드 (예: 097230)')
     
     # 관심 종목 정보
     add_date = Column(DateTime, nullable=False, default=datetime.now, comment='추가일')
@@ -134,7 +133,6 @@ class WatchList(UUIDMixin, Base):
 
     # 관계 설정
     user = relationship('User', back_populates='watch_lists')
-    stock = relationship('Stock', back_populates='watch_lists')
 
     def __repr__(self):
         return f'<WatchList {self.user_id}: {self.stock_id}>'

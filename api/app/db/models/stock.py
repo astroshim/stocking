@@ -25,10 +25,6 @@ class Stock(UUIDMixin, Base):
 
     # 관계 설정
     stock_prices = relationship('StockPrice', back_populates='stock', cascade='all, delete-orphan')
-    orders = relationship('Order', back_populates='stock', cascade='all, delete-orphan')
-    portfolios = relationship('Portfolio', back_populates='stock', cascade='all, delete-orphan')
-    transactions = relationship('Transaction', back_populates='stock', cascade='all, delete-orphan')
-    watch_lists = relationship('WatchList', back_populates='stock', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<Stock {self.code}: {self.name}>'

@@ -36,7 +36,7 @@ class Order(UUIDMixin, Base):
     __tablename__ = 'orders'
 
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, comment='사용자 ID')
-    stock_id = Column(String(36), ForeignKey('stocks.id'), nullable=False, comment='주식 종목 ID')
+    stock_id = Column(String(20), nullable=False, comment='주식 종목 코드 (예: 097230)')
     order_type = Column(SQLEnum(OrderType), nullable=False, comment='주문 유형 (BUY/SELL)')
     order_method = Column(SQLEnum(OrderMethod), nullable=False, comment='주문 방식 (MARKET/LIMIT/STOP_LOSS/TAKE_PROFIT)')
     order_status = Column(SQLEnum(OrderStatus), nullable=False, default=OrderStatus.PENDING, comment='주문 상태')
@@ -67,7 +67,6 @@ class Order(UUIDMixin, Base):
 
     # 관계 설정
     user = relationship('User', back_populates='orders')
-    stock = relationship('Stock', back_populates='orders')
     order_executions = relationship('OrderExecution', back_populates='order', cascade='all, delete-orphan')
     transactions = relationship('Transaction', back_populates='order', cascade='all, delete-orphan')
 

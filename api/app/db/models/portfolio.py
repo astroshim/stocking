@@ -11,7 +11,7 @@ class Portfolio(UUIDMixin, Base):
     __tablename__ = 'portfolios'
 
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, comment='사용자 ID')
-    stock_id = Column(String(36), ForeignKey('stocks.id'), nullable=False, comment='주식 종목 ID')
+    stock_id = Column(String(20), nullable=False, comment='주식 종목 코드 (예: 097230)')
     
     # 보유 수량 및 가격 정보
     quantity = Column(Numeric(20, 0), nullable=False, default=0, comment='보유 수량')
@@ -38,7 +38,6 @@ class Portfolio(UUIDMixin, Base):
 
     # 관계 설정
     user = relationship('User', back_populates='portfolios')
-    stock = relationship('Stock', back_populates='portfolios')
 
     def __repr__(self):
         return f'<Portfolio {self.user_id}: {self.quantity} shares of {self.stock_id}>'
