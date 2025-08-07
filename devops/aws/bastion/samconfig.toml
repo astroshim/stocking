@@ -1,0 +1,10 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "bastion-server"
+s3_bucket = "aws-sam-cli-keauty"
+s3_prefix = "bastion-server"
+region = "ap-northeast-2"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "NetworkStackName=network-infrastructure InstanceType=t3.micro KeyPairName=bastion YourIpAddress=0.0.0.0/0 SSHPort=22"

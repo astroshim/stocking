@@ -1,0 +1,30 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "keauty-s3-cloudfront"
+s3_bucket = "aws-sam-cli-keauty"
+s3_prefix = "keauty-s3-cloudfront"
+region = "ap-northeast-2"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "BucketName=keauty AllowedOrigins=* DomainName=keauty.site AcmCertificateArn=arn:aws:acm:us-east-1:775405889390:certificate/607a2ebf-2b79-417e-b84b-7d1476c6e501"
+confirm_changeset = true
+disable_rollback = false
+
+[dev]
+[dev.deploy]
+[dev.deploy.parameters]
+stack_name = "keauty-s3-cloudfront-dev"
+parameter_overrides = "BucketName=keauty-dev AllowedOrigins=*"
+
+[staging]
+[staging.deploy]
+[staging.deploy.parameters]
+stack_name = "keauty-s3-cloudfront-staging"
+parameter_overrides = "BucketName=keauty-staging AllowedOrigins=*"
+
+[prod]
+[prod.deploy]
+[prod.deploy.parameters]
+stack_name = "keauty-s3-cloudfront-prod"
+parameter_overrides = "BucketName=keauty-prod AllowedOrigins=*"

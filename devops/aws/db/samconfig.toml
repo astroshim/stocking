@@ -1,0 +1,24 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "mysql-db"
+s3_bucket = "aws-sam-cli-keauty"
+s3_prefix = "mysql-db"
+region = "ap-northeast-2"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Environment=dev NetworkStackName=network-infrastructure DBInstanceClass=db.t3.micro DBName=keauty_dev DBUsername=keauty DBPassword=EXAMPLE-PASSWORD-CHANGE-ME DBAllocatedStorage=20 DBMaxAllocatedStorage=100 DBStorageType=gp2 DBIops=0 DBEnableStorageAutoscaling=true DBBackupRetentionPeriod=7 DBMultiAZ=false DBStorageEncrypted=true"
+confirm_changeset = true
+disable_rollback = false
+
+[staging]
+[staging.deploy]
+[staging.deploy.parameters]
+stack_name = "mysql-db-staging"
+parameter_overrides = "Environment=staging NetworkStackName=network-infrastructure-staging DBInstanceClass=db.t3.small DBName=keauty_staging DBUsername=keauty DBPassword=EXAMPLE-PASSWORD-CHANGE-ME DBAllocatedStorage=30 DBMaxAllocatedStorage=200 DBStorageType=gp2 DBIops=0 DBEnableStorageAutoscaling=true DBBackupRetentionPeriod=7 DBMultiAZ=false DBStorageEncrypted=true"
+
+[prod]
+[prod.deploy]
+[prod.deploy.parameters]
+stack_name = "mysql-db-prod"
+parameter_overrides = "Environment=prod NetworkStackName=network-infrastructure-prod DBInstanceClass=db.t3.medium DBName=keauty_prod DBUsername=keauty DBPassword=EXAMPLE-PASSWORD-CHANGE-ME DBAllocatedStorage=50 DBMaxAllocatedStorage=500 DBStorageType=gp3 DBIops=3000 DBEnableStorageAutoscaling=true DBBackupRetentionPeriod=30 DBMultiAZ=true DBStorageEncrypted=true"

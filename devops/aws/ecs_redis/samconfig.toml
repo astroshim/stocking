@@ -1,0 +1,11 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "keauty-ecs-redis-stack"
+s3_bucket = "aws-sam-cli-keauty"
+s3_prefix = "keauty-ecs-redis-stack"
+region = "ap-northeast-2"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "VpcId=\"vpc-058182c6a505dbde5\" PrivateSubnets=\"subnet-0ae5e1d6b473d21ed,subnet-05edd02fb670e163e\""
+image_repositories = []

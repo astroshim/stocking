@@ -1,0 +1,626 @@
+###################################################################
+# 1. User API
+###################################################################
+
+### 사용자 생성 request
+POST http://localhost:5100/api/v1/users
+Content-Type: application/json
+
+{
+  "userid": "johndoe2",
+  "email": "john.doe2@example.com",
+  "password": "hashedpassword123",
+  "name": "John Doe",
+  "phone": "01012345678",
+  "avatar_url": "https://example.com/avatar.jpg",
+  "sign_up_from": "stocking"
+}
+
+### 사용자 로그인 request
+POST http://localhost:5100/api/v1/users/login
+Content-Type: application/json
+
+{
+  "userid": "johndoe",
+  "password": "hashedpassword123"
+}
+
+### 사용자 정보 업데이트
+PUT http://localhost:5100/api/v1/users/45cb1fbc-d05d-4a06-8c1d-4109821c570b
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+Content-Type: application/json
+
+{
+  "name": "John D.",
+  "avatar_url": "https://example.com/new-avatar.jpg",
+  "push_on": false
+}
+
+### show user
+GET http://localhost:5100/api/v1/users/45cb1fbc-d05d-4a06-8c1d-4109821c570b
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+
+### 내정보 확인
+GET http://localhost:5100/api/v1/users/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+
+### 사용자 삭제
+DELETE http://localhost:5100/api/v1/users/uuid
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+
+### 사용자 목록 조회
+GET http://localhost:5100/api/v1/users?page=1&per_page=10
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+
+### push token 등록
+POST http://localhost:5100/api/v1/users/push_tokens
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+Content-Type: application/json
+
+{
+  "push_token": "100ssssssssssssssss",
+  "platform": "ios"
+}
+
+
+# 5. Report API
+###################################################################
+
+### 신고 생성
+POST http://localhost:5100/api/v1/reports
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+Content-Type: application/json
+
+{
+  "reportable_type": "verification",
+  "reportable_id": "d9564bfa-746e-4743-bdc8-95672e916f98",
+  "reason": "inappropriate",
+  "description": "이 챌린지는 부적절한 내용을 포함하고 있습니다."
+}
+
+### 신고 show
+GET http://localhost:5100/api/v1/reports/d39b4bd7-f5bf-42a5-8da9-ca3b9b39afae
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+
+### 신고 상태 업데이트
+PUT http://localhost:5100/api/v1/reports/d39b4bd7-f5bf-42a5-8da9-ca3b9b39afae/status
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+Content-Type: application/json
+
+{
+  "status": "pending",
+  "handler_comment": "허위 신고로 판단되어 게시물 유지됨"
+}
+
+### 내가 신고한 목록 조회
+GET http://localhost:5100/api/v1/reports/my
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+
+### 신고 목록 조회
+GET http://localhost:5100/api/v1/reports?sort_by=created_at&sort_order=desc&page=1&per_page=10
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+
+### 업로드 URL 요청
+GET http://localhost:5100/api/v1/storages/upload_url?extension=jpg
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs
+
+
+curl -X GET 'http://localhost:5100/api/v1/storages/upload_url?extension=jpg' 
+-H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0NWNiMWZiYy1kMDVkLTRhMDYtOGMxZC00MTA5ODIxYzU3MGIiLCJleHAiOjE3NDU1MjcwNTR9.Bb_gKWcSzlhbSHMIdo0OO8PAnvDtrqHb4lXtH4qUyMs'
+
+
+
+
+curl -X GET 'https://stocking-Appli-zvYxMmngWbmh-1890387400.ap-northeast-2.elb.amazonaws.com/api/v1/storages/upload_url?extension=jpg' 
+
+
+###
+# 업로드 URL 요청
+GET http://localhost:5100/api/v1/storages/upload_url?extension=jpg
+
+###
+# 마케팅 등록 요청
+POST http://localhost:5100/api/v1/routine-marketing 
+Host: your-domain.com
+User-Agent: curl/8.4.0
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "country": "South Korea",
+  "skin_type": "Oily",
+  "product_name": "Super Aqua Ultra Hyalon Cream",
+  "product_image_url": "https://example.com/product.jpg"
+}
+
+
+###
+# 첫 번째 페이지 조회 (기본 10개)
+GET http://localhost:5100/api/v1/routine-marketing
+
+###
+# 두 번째 페이지, 페이지당 20개 조회
+GET http://localhost:5100/api/v1/routine-marketing?page=2&per_page=20
+
+###
+# 특정 페이지 조회
+GET http://localhost:5100/api/v1/routine-marketing?page=5&per_page=15
+
+###
+# 단일 조회
+GET http://localhost:5100/api/v1/routine-marketing/18d319f1-8b5e-48c2-861c-642edf573f29
+
+###
+# 삭제
+DELETE http://localhost:5100/api/v1/routine-marketing/18d319f1-8b5e-48c2-861c-642edf573f29
+
+###############################################################################
+# 주식 거래 관련 API
+###############################################################################
+
+###############################################################################
+# 1. 주식 관리 API (Stock Management)
+###############################################################################
+
+###
+# 주식 목록 조회
+GET http://localhost:5100/api/v1/trading/stocks?page=1&size=20
+Authorization: Bearer {{access_token}}
+
+###
+# 주식 목록 조회 (검색 필터)
+GET http://localhost:5100/api/v1/trading/stocks?keyword=삼성&market=KOSPI&sector=TECH
+Authorization: Bearer {{access_token}}
+
+###
+# 주식 상세 조회
+GET http://localhost:5100/api/v1/trading/stocks/{{stock_id}}
+Authorization: Bearer {{access_token}}
+
+###
+# 주식 종목 등록 (관리자)
+POST http://localhost:5100/api/v1/trading/stocks
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+    "code": "005930",
+    "name": "삼성전자",
+    "market": "KOSPI",
+    "sector": "TECH",
+    "industry": "반도체",
+    "market_cap": 500000000000000,
+    "listed_shares": 5969782550,
+    "listing_date": "1975-06-11T00:00:00",
+    "description": "종합 전자회사"
+}
+
+###
+# 주식 종목 수정 (관리자)
+PUT http://localhost:5100/api/v1/trading/stocks/{{stock_id}}
+Authorization: Bearer {{admin_token}}
+Content-Type: application/json
+
+{
+    "name": "삼성전자(수정)",
+    "market_cap": 510000000000000,
+    "description": "글로벌 종합 전자회사"
+}
+
+###
+# 주식 가격 등록
+POST http://localhost:5100/api/v1/trading/stocks/{{stock_id}}/prices
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "stock_id": "{{stock_id}}",
+    "open_price": 71000,
+    "high_price": 72500,
+    "low_price": 70500,
+    "close_price": 72000,
+    "current_price": 72000,
+    "volume": 15234567,
+    "trading_value": 1098765432100,
+    "price_change": 1000,
+    "price_change_rate": 1.41,
+    "price_date": "2025-01-07T09:00:00",
+    "is_real_time": true
+}
+
+###
+# 주식 가격 이력 조회
+GET http://localhost:5100/api/v1/trading/stocks/{{stock_id}}/prices?start_date=2025-01-01&end_date=2025-01-07&limit=30
+Authorization: Bearer {{access_token}}
+
+###
+# 현재가 조회
+GET http://localhost:5100/api/v1/trading/stocks/{{stock_id}}/current-price
+Authorization: Bearer {{access_token}}
+
+###
+# 시장 목록 조회
+GET http://localhost:5100/api/v1/trading/markets
+Authorization: Bearer {{access_token}}
+
+###
+# 업종 목록 조회
+GET http://localhost:5100/api/v1/trading/sectors
+Authorization: Bearer {{access_token}}
+
+###############################################################################
+# 2. 주문 관리 API (Order Management)
+###############################################################################
+
+###
+# 주문 생성 (지정가 매수)
+POST http://localhost:5100/api/v1/trading/orders
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "stock_id": "{{stock_id}}",
+    "order_type": "BUY",
+    "order_method": "LIMIT",
+    "quantity": 10,
+    "order_price": 71500,
+    "expires_at": "2025-01-08T15:30:00",
+    "notes": "장기 투자용 매수"
+}
+
+###
+# 주문 생성 (시장가 매도)
+POST http://localhost:5100/api/v1/trading/orders
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "stock_id": "{{stock_id}}",
+    "order_type": "SELL",
+    "order_method": "MARKET",
+    "quantity": 5,
+    "notes": "일부 수익 실현"
+}
+
+###
+# 빠른 주문 (금액 기준 매수)
+POST http://localhost:5100/api/v1/trading/orders/quick
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "stock_id": "{{stock_id}}",
+    "order_type": "BUY",
+    "amount": 1000000
+}
+
+###
+# 빠른 주문 (수량 기준 매도)
+POST http://localhost:5100/api/v1/trading/orders/quick
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "stock_id": "{{stock_id}}",
+    "order_type": "SELL",
+    "quantity": 10
+}
+
+###
+# 주문 목록 조회
+GET http://localhost:5100/api/v1/trading/orders?page=1&size=20&status=PENDING
+Authorization: Bearer {{access_token}}
+
+###
+# 주문 목록 조회 (필터링)
+GET http://localhost:5100/api/v1/trading/orders?stock_id={{stock_id}}&order_type=BUY&status=FILLED
+Authorization: Bearer {{access_token}}
+
+###
+# 주문 상세 조회
+GET http://localhost:5100/api/v1/trading/orders/{{order_id}}
+Authorization: Bearer {{access_token}}
+
+###
+# 주문 수정
+PUT http://localhost:5100/api/v1/trading/orders/{{order_id}}
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "order_price": 72000,
+    "quantity": 15,
+    "expires_at": "2025-01-09T15:30:00",
+    "notes": "가격 조정"
+}
+
+###
+# 주문 취소
+DELETE http://localhost:5100/api/v1/trading/orders/{{order_id}}
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "cancel_reason": "투자 전략 변경"
+}
+
+###
+# 주문 요약 정보
+GET http://localhost:5100/api/v1/trading/orders/summary?period_days=30
+Authorization: Bearer {{access_token}}
+
+###
+# 대기중인 주문 조회
+GET http://localhost:5100/api/v1/trading/orders/pending?page=1&size=10
+Authorization: Bearer {{access_token}}
+
+###
+# 주문 이력 조회
+GET http://localhost:5100/api/v1/trading/orders/history?start_date=2025-01-01&end_date=2025-01-07
+Authorization: Bearer {{access_token}}
+
+###
+# 주문 강제 체결 (관리자/시뮬레이션)
+POST http://localhost:5100/api/v1/trading/orders/{{order_id}}/execute?execution_price=72000
+Authorization: Bearer {{access_token}}
+
+###############################################################################
+# 3. 포트폴리오 관리 API (Portfolio Management)
+###############################################################################
+
+###
+# 포트폴리오 조회
+GET http://localhost:5100/api/v1/trading/portfolio?page=1&size=20&only_active=true
+Authorization: Bearer {{access_token}}
+
+###
+# 포트폴리오 요약
+GET http://localhost:5100/api/v1/trading/portfolio/summary
+Authorization: Bearer {{access_token}}
+
+###
+# 포트폴리오 분석
+GET http://localhost:5100/api/v1/trading/portfolio/analysis
+Authorization: Bearer {{access_token}}
+
+###
+# 종목별 포트폴리오 조회
+GET http://localhost:5100/api/v1/trading/portfolio/{{stock_id}}
+Authorization: Bearer {{access_token}}
+
+###
+# 가상 잔고 조회
+GET http://localhost:5100/api/v1/trading/balance
+Authorization: Bearer {{access_token}}
+
+###
+# 가상 잔고 업데이트 (입금)
+PUT http://localhost:5100/api/v1/trading/balance
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "amount": 5000000,
+    "change_type": "DEPOSIT",
+    "description": "투자 자금 추가 입금"
+}
+
+###
+# 가상 잔고 업데이트 (출금)
+PUT http://localhost:5100/api/v1/trading/balance
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "amount": -1000000,
+    "change_type": "WITHDRAW",
+    "description": "수익 일부 출금"
+}
+
+###
+# 잔고 변동 이력
+GET http://localhost:5100/api/v1/trading/balance/history?page=1&size=50&change_type=DEPOSIT
+Authorization: Bearer {{access_token}}
+
+###
+# 관심 종목 추가
+POST http://localhost:5100/api/v1/trading/watchlist
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "stock_id": "{{stock_id}}",
+    "target_price": 75000,
+    "stop_loss_price": 68000,
+    "memo": "반도체 업황 회복 기대",
+    "price_alert_enabled": true,
+    "price_alert_upper": 75000,
+    "price_alert_lower": 68000,
+    "category": "기술주"
+}
+
+###
+# 관심 종목 목록 조회
+GET http://localhost:5100/api/v1/trading/watchlist?page=1&size=20&category=기술주
+Authorization: Bearer {{access_token}}
+
+###
+# 관심 종목 수정
+PUT http://localhost:5100/api/v1/trading/watchlist/{{watchlist_id}}
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "target_price": 78000,
+    "memo": "목표가 상향 조정",
+    "price_alert_upper": 78000
+}
+
+###
+# 관심 종목 삭제
+DELETE http://localhost:5100/api/v1/trading/watchlist/{{watchlist_id}}
+Authorization: Bearer {{access_token}}
+
+###
+# 관심 종목 순서 변경
+PUT http://localhost:5100/api/v1/trading/watchlist/{{watchlist_id}}/order?new_order=1
+Authorization: Bearer {{access_token}}
+
+###
+# 관심 종목 카테고리 목록
+GET http://localhost:5100/api/v1/trading/watchlist/categories
+Authorization: Bearer {{access_token}}
+
+###############################################################################
+# 4. 거래 분석 API (Trading Analysis)
+###############################################################################
+
+###
+# 거래 내역 조회
+GET http://localhost:5100/api/v1/trading/transactions?page=1&size=20&transaction_type=BUY
+Authorization: Bearer {{access_token}}
+
+###
+# 거래 내역 조회 (필터링)
+GET http://localhost:5100/api/v1/trading/transactions?stock_id={{stock_id}}&start_date=2025-01-01&end_date=2025-01-07
+Authorization: Bearer {{access_token}}
+
+###
+# 거래 내역 상세
+GET http://localhost:5100/api/v1/trading/transactions/{{transaction_id}}
+Authorization: Bearer {{access_token}}
+
+###
+# 거래 통계 조회
+GET http://localhost:5100/api/v1/trading/statistics?period_type=monthly&start_date=2024-12-01&end_date=2025-01-07
+Authorization: Bearer {{access_token}}
+
+###
+# 거래 성과 분석
+GET http://localhost:5100/api/v1/trading/performance?period=1Y
+Authorization: Bearer {{access_token}}
+
+###
+# 월별 성과 조회
+GET http://localhost:5100/api/v1/trading/performance/monthly?year=2024
+Authorization: Bearer {{access_token}}
+
+###
+# 거래 대시보드
+GET http://localhost:5100/api/v1/trading/dashboard
+Authorization: Bearer {{access_token}}
+
+###
+# 시장 데이터
+GET http://localhost:5100/api/v1/trading/market-data
+Authorization: Bearer {{access_token}}
+
+###
+# 호가창 조회
+GET http://localhost:5100/api/v1/trading/orderbook/{{stock_id}}
+Authorization: Bearer {{access_token}}
+
+###
+# 매매 신호 조회
+GET http://localhost:5100/api/v1/trading/signals/{{stock_id}}
+Authorization: Bearer {{access_token}}
+
+###
+# 리스크 평가
+GET http://localhost:5100/api/v1/trading/risk-assessment
+Authorization: Bearer {{access_token}}
+
+###
+# 백테스팅 실행
+POST http://localhost:5100/api/v1/trading/backtest
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+    "strategy_name": "이동평균선 교차 전략",
+    "start_date": "2024-01-01T00:00:00",
+    "end_date": "2024-12-31T23:59:59",
+    "initial_capital": 10000000,
+    "stocks": ["{{stock_id}}", "{{stock_id_2}}"],
+    "parameters": {
+        "short_ma": 5,
+        "long_ma": 20,
+        "stop_loss": 0.05,
+        "take_profit": 0.15
+    }
+}
+
+###
+# 거래 내역 내보내기
+GET http://localhost:5100/api/v1/trading/export/transactions?format=csv&start_date=2024-01-01&end_date=2024-12-31
+Authorization: Bearer {{access_token}}
+
+###
+# 세금 신고용 자료
+GET http://localhost:5100/api/v1/trading/reports/tax?year=2024
+Authorization: Bearer {{access_token}}
+
+###############################################################################
+# 변수 설정 (테스트용)
+###############################################################################
+
+@access_token = your_access_token_here
+@admin_token = your_admin_token_here
+@stock_id = stock-uuid-example-1234
+@stock_id_2 = stock-uuid-example-5678
+@order_id = order-uuid-example-1234
+@transaction_id = transaction-uuid-example-1234
+@watchlist_id = watchlist-uuid-example-1234
+
+### === Virtual Balance Payment API === ###
+
+### 가상 잔고 초기화 (신규 사용자)
+POST {{base_url}}/payments/virtual-balance/initialize
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "initial_amount": "1000000.00"
+}
+
+### 가상 잔고 조회
+GET {{base_url}}/payments/virtual-balance
+Authorization: Bearer {{access_token}}
+
+### 가상 잔고 입금 (실제 결제 연동)
+POST {{base_url}}/payments/virtual-balance/deposit
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "amount": "100000.00",
+  "description": "가상 거래 잔고 충전"
+}
+
+### 가상 잔고 출금
+POST {{base_url}}/payments/virtual-balance/withdraw
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{
+  "amount": "50000.00",
+  "description": "가상 거래 잔고 출금"
+}
+
+### 결제 콜백 처리 (외부 결제사에서 호출)
+POST {{base_url}}/payments/callback
+Content-Type: application/json
+
+{
+  "payment_id": "payment_12345",
+  "user_id": "user-uuid-example-1234",
+  "amount": "100000.00",
+  "status": "PAID",
+  "transaction_id": "txn_67890",
+  "payment_method": "card",
+  "payment_time": "2024-01-15T10:30:00Z",
+  "extra_data": {
+    "card_type": "credit",
+    "merchant_name": "Virtual Trading Platform"
+  }
+}

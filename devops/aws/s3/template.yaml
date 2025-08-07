@@ -1,0 +1,280 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Direct Upload S3 Bucket with CloudFront Distribution
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket for direct uploads
+    Default: keauty-direct-upload-bucket
+
+  # AllowedOrigins:
+  #   Type: CommaDelimitedList
+  #   Description: List of allowed origin domains for CORS
+  #   Default: https://your-app-domain.com,http://localhost:3000
+
+  IndexDocument:
+    Type: String
+    Description: The index document file name
+    Default: index.html
+
+  ErrorDocument:
+    Type: String
+    Description: The error document file name
+    Default: error.html
+
+  # 대체 도메인 설정을 위한 파라미터 추가
+  DomainName:
+    Type: String
+    Description: Alternative domain name for the CloudFront distribution
+    Default: example.com
+  
+  AcmCertificateArn:
+    Type: String
+    Description: ARN of the ACM certificate for the domain name (must be in us-east-1 for CloudFront)
+    Default: ""
+
+
+Resources:
+  # S3 버킷 리소스
+  DirectUploadBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+
+      # # 퍼블릭 액세스 차단 설정 비활성화
+      # PublicAccessBlockConfiguration:
+      #   BlockPublicAcls: false
+      #   BlockPublicPolicy: false
+      #   IgnorePublicAcls: false
+      #   RestrictPublicBuckets: false
+
+      # 정적 웹사이트 호스팅 설정 추가
+      WebsiteConfiguration:
+        IndexDocument: !Ref IndexDocument
+        ErrorDocument: !Ref ErrorDocument
+      # CORS 설정 (직접 업로드를 위해 필요)
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - "*"
+            AllowedMethods:
+              - GET
+              - PUT
+              - POST
+              - DELETE
+              - HEAD
+            AllowedOrigins: 
+              - '*'
+            ExposedHeaders:
+              - ETag
+            MaxAge: 3600
+
+  # S3 버킷 정책 (CloudFront 액세스 허용)
+  DirectUploadBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DirectUploadBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: 's3:GetObject'
+            Resource: !Sub 'arn:aws:s3:::${DirectUploadBucket}/*'
+            Condition:
+              StringEquals:
+                'AWS:SourceArn': !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+          # # 정적 웹사이트 호스팅을 위한 퍼블릭 읽기 허용 정책 추가
+          # - Effect: Allow
+          #   Principal: "*"
+          #   Action: 's3:GetObject'
+          #   Resource: !Sub 'arn:aws:s3:::${DirectUploadBucket}/*'
+
+          # CloudFront OAI를 통한 접근만 허용
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CloudFrontOriginAccessIdentity}"
+            Action: 's3:GetObject'
+            Resource: !Sub 'arn:aws:s3:::${DirectUploadBucket}/*'
+
+  # CloudFront Origin Access Identity
+  CloudFrontOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub "OAI for ${BucketName}"
+
+  # 디렉토리 접근시 무조건 index.html 을 붙이는 CloudFront Function 추가
+  DirectoryIndexRewriteFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: !Sub "${AWS::StackName}-DirectoryIndexRewrite"
+      AutoPublish: true
+      FunctionCode: |
+        function handler(event) {
+            var request = event.request;
+            var uri = request.uri;
+            
+            // Add index.html to directory paths
+            if (uri.endsWith('/')) {
+                request.uri += 'index.html';
+            } 
+            // Add /index.html to paths without extensions
+            else if (!uri.includes('.')) {
+                request.uri += '/index.html';
+            }
+            
+            // Prepend the /web prefix for the web app
+            request.uri = '/web' + request.uri;
+
+            return request;
+        }
+      FunctionConfig:
+        Comment: !Sub "${AWS::StackName} - Rewrite URL for SPA and add /web prefix"
+        Runtime: cloudfront-js-1.0
+
+  # CloudFront 배포
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !GetAtt DirectUploadBucket.RegionalDomainName
+            Id: S3Origin
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub 'origin-access-identity/cloudfront/${CloudFrontOriginAccessIdentity}'
+        Enabled: true
+        CacheBehaviors:
+          - PathPattern: /media/*
+            TargetOriginId: S3Origin
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+            ViewerProtocolPolicy: redirect-to-https
+            Compress: true
+            ForwardedValues:
+              QueryString: false
+              Cookies:
+                Forward: none
+              Headers:
+                - Origin
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          TargetOriginId: S3Origin
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: redirect-to-https
+          # CloudFront Function 연결 추가
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt DirectoryIndexRewriteFunction.FunctionARN
+
+        # 대체 도메인 이름 추가
+        Aliases:
+          - !Ref DomainName
+          - !Sub "www.${DomainName}"
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          # 인증서 ARN이 제공된 경우, 해당 인증서를 사용
+          !If 
+            - HasCertificate
+            - AcmCertificateArn: !Ref AcmCertificateArn
+              MinimumProtocolVersion: TLSv1.2_2021
+              SslSupportMethod: sni-only
+            - CloudFrontDefaultCertificate: true
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+
+  # 프리사인드 URL 생성을 위한 IAM 역할
+  DirectUploadRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+      Policies:
+        - PolicyName: DirectUploadPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                Resource: !Sub 'arn:aws:s3:::${DirectUploadBucket}/*'
+Conditions:
+  # 인증서 ARN이 제공되었는지 확인하는 조건
+  HasCertificate: !Not [!Equals [!Ref AcmCertificateArn, ""]]
+
+Outputs:
+  BucketName:
+    Description: S3 버킷 이름
+    Value: !Ref DirectUploadBucket
+    Export:
+      Name: !Sub "${AWS::StackName}-BucketName"
+
+  CloudFrontDomain:
+    Description: CloudFront 도메인 이름
+    Value: !GetAtt CloudFrontDistribution.DomainName
+    Export:
+      Name: !Sub "${AWS::StackName}-CloudFrontDomain"
+
+  BucketURL:
+    Description: S3 버킷 URL
+    Value: !Sub "https://${DirectUploadBucket}.s3.amazonaws.com"
+    Export:
+      Name: !Sub "${AWS::StackName}-BucketURL"
+
+  CloudFrontURL:
+    Description: CloudFront Distribution URL
+    Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+    Export:
+      Name: !Sub "${AWS::StackName}-CloudFrontURL"
+
+  DirectUploadRoleArn:
+    Description: IAM Role ARN for S3 Direct Upload
+    Value: !GetAtt DirectUploadRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-DirectUploadRoleArn"
+
+  # 정적 웹사이트 호스팅 URL 출력 추가
+  WebsiteURL:
+    Description: S3 정적 웹사이트 호스팅 URL
+    Value: !GetAtt DirectUploadBucket.WebsiteURL
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsiteURL"
+
+  WebsiteDomain:
+    Description: S3 정적 웹사이트 도메인
+    Value: !Select [2, !Split ["/", !GetAtt DirectUploadBucket.WebsiteURL]]
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsiteDomain"
+
+  # 대체 도메인 URL 출력 추가
+  CustomDomainURL:
+    Description: 정적 웹사이트 커스텀 도메인 URL
+    Value: !If [HasCertificate, !Sub "https://${DomainName}", "No custom domain configured"]
+    Export:
+      Name: !Sub "${AWS::StackName}-CustomDomainURL"
+    

@@ -1,0 +1,113 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: keauty media
+
+Parameters:
+  BucketName:
+    Type: String
+    Default: keauty-challenge
+    Description: Name of the S3 bucket
+
+  BucketRegion:
+    Type: String
+    Default: ap-northeast-2
+    Description: Region where the S3 bucket is located
+  
+  DomainName:
+    Type: String
+    Description: The custom domain name to use for the CloudFront distribution (e.g., example.com)
+  
+  AcmCertificateArn:
+    Type: String
+    Description: ARN of the ACM certificate in us-east-1 region for CloudFront (must be in us-east-1)
+
+Resources:
+  # CloudFront Origin Access Identity (OAI)
+  CloudFrontOAI:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: !Sub "OAI for ${BucketName} S3 bucket"
+
+  # CloudFront Distribution
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Aliases:
+          - !Ref DomainName
+        Origins:
+          - DomainName: !Sub "${BucketName}.s3.${BucketRegion}.amazonaws.com"
+            Id: !Sub "S3-${BucketName}"
+            S3OriginConfig:
+              OriginAccessIdentity: !Sub "origin-access-identity/cloudfront/${CloudFrontOAI}"
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          TargetOriginId: !Sub "S3-${BucketName}"
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: redirect-to-https  # HTTP를 HTTPS로 리다이렉트
+          Compress: true
+          MinTTL: 0
+          DefaultTTL: 86400    # 1 day
+          MaxTTL: 31536000     # 1 year
+        PriceClass: PriceClass_100
+        ViewerCertificate:
+          AcmCertificateArn: !Ref AcmCertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021  # 최신 TLS 프로토콜 사용
+
+  # S3 버킷 정책 업데이트
+  S3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BucketName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity ${CloudFrontOAI}"
+            Action: s3:GetObject
+            Resource: !Sub "arn:aws:s3:::${BucketName}/*"
+
+#  # Route 53 레코드 (선택 사항 - 도메인이 Route 53에서 관리되는 경우) --> Route53에는 cloudfront 생성후에 수동으로 추가
+#  DomainRecord:
+#    Type: AWS::Route53::RecordSet
+#    Properties:
+#      HostedZoneName: !Sub "${DomainName}."
+#      Name: !Ref DomainName
+#      Type: A
+#      AliasTarget:
+#        DNSName: !GetAtt CloudFrontDistribution.DomainName
+#        HostedZoneId: Z2FDTNDATAQYW2  # CloudFront의 고정 Hosted Zone ID
+#        EvaluateTargetHealth: false
+
+Outputs:
+  CloudFrontDistributionId:
+    Description: CloudFront Distribution ID
+    Value: !Ref CloudFrontDistribution
+
+  CloudFrontDomainName:
+    Description: CloudFront Distribution Domain Name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+
+  CloudFrontURL:
+    Description: CloudFront URL
+    Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+  
+  CustomDomainURL:
+    Description: Custom Domain URL
+    Value: !Sub "https://${DomainName}"
+
+  OAIId:
+    Description: CloudFront Origin Access Identity ID
+    Value: !Ref CloudFrontOAI

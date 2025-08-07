@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Redis ECS Service Deployment with Service Discovery
+
+Parameters:
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID for Redis deployment
+
+  PrivateSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnets for Redis ECS service
+
+  ServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Security group ID of the API service
+
+  ECSCluster:
+    Type: String
+    Default: KeautyApiCluster
+    Description: ECS Cluster name
+
+Resources:
+  # 기존 IAM 역할 생성
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "keauty-redis-execution-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+      Path: /
+
+  # 태스크 역할
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "keauty-redis-task-role"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Path: /
+
+  # 네임스페이스 생성
+  PrivateNamespace:
+    Type: AWS::ServiceDiscovery::PrivateDnsNamespace
+    Properties:
+      Name: keauty.local
+      Vpc: !Ref VpcId
+
+  # Redis 서비스 디스커버리 리소스
+  RedisServiceDiscovery:
+    Type: AWS::ServiceDiscovery::Service
+    Properties:
+      Name: redis
+      DnsConfig:
+        RoutingPolicy: MULTIVALUE
+        DnsRecords:
+          - TTL: 60
+            Type: A
+      HealthCheckCustomConfig:
+        FailureThreshold: 1
+      NamespaceId: !Ref PrivateNamespace
+
+  # Redis 보안 그룹
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Redis ECS service
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref ServiceSecurityGroup
+
+  # Redis Task Definition
+  RedisTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: keauty-redis
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: redis-container
+          Image: redis:7.0-alpine
+          Essential: true
+          PortMappings:
+            - ContainerPort: 6379
+              HostPort: 6379
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref RedisCloudWatchLogsGroup
+              awslogs-region: ap-northeast-2
+              awslogs-stream-prefix: keauty-redis
+
+  # Redis CloudWatch Logs Group
+  RedisCloudWatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/keauty-redis
+      RetentionInDays: 30
+
+  # Redis Service
+  RedisService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: KeautyRedisService
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref RedisTaskDefinition
+      # Service Discovery 등록
+      ServiceRegistries:
+        - RegistryArn: !GetAtt RedisServiceDiscovery.Arn
+          ContainerName: redis-container
+      DesiredCount: 1
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref RedisSecurityGroup
+          Subnets: !Ref PrivateSubnets
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+Outputs:
+  RedisEndpoint:
+    Description: "Redis Service Endpoint"
+    Value: !Sub "redis.keauty.local"  # 서비스 디스커버리 DNS 이름
+    Export:
+      Name: RedisServiceEndpoint

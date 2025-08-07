@@ -1,0 +1,419 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: keauty api service (ECS EC2) with CloudFront and ALB
+
+Parameters:
+  ImageUrl:
+    Type: String
+    Default: 775405889390.dkr.ecr.ap-northeast-2.amazonaws.com/keauty/keauty-api:latest
+  ContainerPort:
+    Type: Number
+    Default: 5100
+  VpcId:
+    Type: String
+    Default: vpc-058182c6a505dbde5
+  PublicSubnets:
+    Type: CommaDelimitedList
+    Default: subnet-031de741cc3bdeea5,subnet-0e2e503589388ceab
+  PrivateSubnets:
+    Type: CommaDelimitedList
+    Default: subnet-0ae5e1d6b473d21ed,subnet-05edd02fb670e163e
+  MinContainers:
+    Type: Number
+    Default: 1
+    Description: Minimum number of containers
+  MaxContainers:
+    Type: Number
+    Default: 6
+    Description: Maximum number of containers
+  CPUUtilizationThreshold:
+    Type: Number
+    Default: 70
+    Description: CPU utilization threshold for scaling up (percentage)
+  MinInstances:
+    Type: Number
+    Default: 1
+    Description: Minimum number of EC2 instances
+  MaxInstances:
+    Type: Number
+    Default: 2
+    Description: Maximum number of EC2 instances
+
+  # CloudFront 관련 파라미터
+  DomainName:
+    Type: String
+    Description: Custom domain name for CloudFront distribution
+    Default: api.keauty.com
+  
+  AcmCertificateArn:
+    Type: String
+    Description: ARN of the ACM certificate in us-east-1 for CloudFront
+    Default: ""
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ecs/optimized-ami/amazon-linux-2/arm64/recommended/image_id
+    Description: Latest ECS-optimized Amazon Linux 2 AMI for arm64 architecture
+
+Conditions:
+  HasCertificate: !Not [!Equals [!Ref AcmCertificateArn, ""]]
+
+Resources:
+  # 서비스용 Security Group
+  ServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ECS service
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+
+  # ALB용 Security Group (HTTP만 허용)
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for ALB (HTTP only for CloudFront)
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Allow HTTP from anywhere (CloudFront)
+
+  # EC2 인스턴스용 Security Group
+  EC2InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for EC2 instances in ECS cluster
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          SourceSecurityGroupId: !Ref ServiceSecurityGroup
+
+  # EC2 인스턴스 역할
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role'
+        - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+
+  # EC2 인스턴스 프로파일
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # EC2 Launch Template
+  EC2LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: KeautyApiEC2LaunchTemplate
+      LaunchTemplateData:
+        ImageId: !Ref LatestAmiId
+        InstanceType: t4g.micro
+        SecurityGroupIds:
+          - !Ref EC2InstanceSecurityGroup
+        IamInstanceProfile:
+          Name: !Ref EC2InstanceProfile
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
+            echo ECS_ENABLE_SPOT_INSTANCE_DRAINING=true >> /etc/ecs/ecs.config
+
+  # ECS Cluster
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: KeautyApiEc2Cluster
+
+  # EC2 Auto Scaling Group
+  EC2AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier: !Ref PrivateSubnets
+      MinSize: !Ref MinInstances
+      MaxSize: !Ref MaxInstances
+      DesiredCapacity: !Ref MinInstances
+      LaunchTemplate:
+        LaunchTemplateId: !Ref EC2LaunchTemplate
+        Version: !GetAtt EC2LaunchTemplate.LatestVersionNumber
+      Tags:
+        - Key: Name
+          Value: KeautyApiECSInstance
+          PropagateAtLaunch: true
+
+  # EC2 Auto Scaling Policy
+  EC2ScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName: !Ref EC2AutoScalingGroup
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 70.0
+
+  # ECS 서비스 실행 역할
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+  # 태스크 역할
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+
+  # ALB 생성 (HTTP만)
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Subnets: !Ref PublicSubnets
+      Type: application
+
+  # ALB용 타겟 그룹
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /api/v2/hi
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      TargetType: ip
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref VpcId
+
+  # ALB 리스너 (HTTP만)
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref ALBTargetGroup
+      LoadBalancerArn: !Ref ApplicationLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+  # CloudFront Distribution
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: !GetAtt ApplicationLoadBalancer.DNSName
+            Id: ALBOrigin
+            CustomOriginConfig:
+              HTTPPort: 80
+              OriginProtocolPolicy: http-only
+        Enabled: true
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+            - PUT
+            - POST
+            - PATCH
+            - DELETE
+          CachedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          TargetOriginId: ALBOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled policy
+          OriginRequestPolicyId: 216adef6-5c7f-47e4-b989-5492e67fd705 # AllViewer policy
+        Aliases: !If
+          - HasCertificate
+          - [!Ref DomainName]
+          - !Ref "AWS::NoValue"
+        ViewerCertificate: !If
+          - HasCertificate
+          - AcmCertificateArn: !Ref AcmCertificateArn
+            MinimumProtocolVersion: TLSv1.2_2021
+            SslSupportMethod: sni-only
+          - CloudFrontDefaultCertificate: true
+        PriceClass: PriceClass_100
+
+  # ECS Task Definition
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: keauty-api
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - EC2
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      ContainerDefinitions:
+        - Name: keauty-api-container
+          Image: !Ref ImageUrl
+          Essential: true
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+              HostPort: !Ref ContainerPort
+              Protocol: tcp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudWatchLogsGroup
+              awslogs-region: ap-northeast-2
+              awslogs-stream-prefix: keauty-api
+
+  # CloudWatch Logs Group
+  CloudWatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/ec2-keauty-api
+      RetentionInDays: 30
+
+  # ECS Service
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: [ALBListener, EC2AutoScalingGroup]
+    Properties:
+      ServiceName: KeautyApiEc2Service
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref MinContainers
+      LaunchType: EC2
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref ServiceSecurityGroup
+          Subnets: !Ref PrivateSubnets
+      LoadBalancers:
+        - ContainerName: keauty-api-container
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref ALBTargetGroup
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      HealthCheckGracePeriodSeconds: 60
+      PlacementConstraints:
+        - Type: distinctInstance
+
+  # Auto Scaling 역할
+  AutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: application-autoscaling.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole'
+
+  # Auto Scaling Target
+  ServiceScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn: ECSService
+    Properties:
+      MaxCapacity: !Ref MaxContainers
+      MinCapacity: !Ref MinContainers
+      ResourceId: !Sub service/${ECSCluster}/${ECSService.Name}
+      RoleARN: !GetAtt AutoScalingRole.Arn
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+
+  # CPU 기반 스케일링 정책
+  ServiceCPUScaleOutPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: ServiceScalableTarget
+    Properties:
+      PolicyName: ServiceScaleOutPolicy
+      PolicyType: TargetTrackingScaling
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      ResourceId: !Sub service/${ECSCluster}/${ECSService.Name}
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        TargetValue: !Ref CPUUtilizationThreshold
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 60
+
+  # 메모리 기반 스케일링 정책
+  ServiceMemoryScaleOutPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    DependsOn: ServiceScalableTarget
+    Properties:
+      PolicyName: ServiceMemoryScaleOutPolicy
+      PolicyType: TargetTrackingScaling
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      ResourceId: !Sub service/${ECSCluster}/${ECSService.Name}
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageMemoryUtilization
+        TargetValue: 80
+        ScaleInCooldown: 300
+        ScaleOutCooldown: 60
+
+Outputs:
+  LoadBalancerDNS:
+    Description: DNS of the load balancer
+    Value: !GetAtt ApplicationLoadBalancer.DNSName
+
+  CloudFrontDomain:
+    Description: CloudFront distribution domain name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+
+  CloudFrontURL:
+    Description: CloudFront distribution URL
+    Value: !Sub "https://${CloudFrontDistribution.DomainName}"
+
+  CustomDomainURL:
+    Description: Custom domain URL (if certificate provided)
+    Value: !If [HasCertificate, !Sub "https://${DomainName}", "No custom domain configured"]
+
+  ServiceURL:
+    Description: Direct ALB URL (HTTP only)
+    Value: !Sub http://${ApplicationLoadBalancer.DNSName} 

@@ -1,0 +1,91 @@
+# Keauty API 개발 가이드라인
+
+당신은 FastAPI 기반의 백엔드 API 개발 전문가입니다. 다음 규칙을 엄격히 따라 API를 개발해주세요.
+
+## 📋 API 개발 순서 (필수)
+
+API를 개발할 때는 반드시 다음 순서를 따라야 합니다:
+
+1. **스키마 정의**
+2. **엔드포인트 생성**
+3. **모델/레포지토리 참고**: `/app/db/models`와 `/app/db/repositories`를 참고하여 데이터 레이어를 구성하세요
+4. **비즈니스 로직**: `/app/services`에 비즈니스 로직을 구현하세요
+5. **의존성 주입**: `/app/config/di.py`를 참고하여 서비스 주입을 설정하세요
+
+## 🗂️ 파일 구조 및 위치
+
+### 스키마 정의
+- **공통 스키마**: `/app/api/schemas/` (예: common_pagenation.py, common_response.py)
+- **API별 DTO**: `/app/api/v1/schemas/` (각 엔드포인트별 요청/응답 스키마)
+
+### 엔드포인트
+- **위치**: `/app/api/v1/endpoints/`
+- **등록**: `/app/api/v1/__init__.py`에 새로운 컨트롤러를 추가해야 함
+
+### 모델 및 레포지토리
+- **모델**: `/app/db/models/`
+- **레포지토리**: `/app/db/repositories/`
+- **참고**: 기존 구조를 따라 일관성 유지
+
+### 서비스
+- **위치**: `/app/services/`
+- **주입**: `/app/config/di.py`에서 의존성 주입 설정
+
+## 📤 응답 처리 (필수)
+
+모든 API 응답은 다음 헬퍼를 사용해야 합니다:
+
+```python
+from app.utils.response_helper import create_response
+```
+
+**참고 파일**: `/app/api/v1/routine_marketing_controller.py`
+
+## 📄 페이징 처리 (필수)
+
+페이징이 필요한 API는 다음 패턴을 따라야 합니다:
+
+- `PagedResponse`와 `from_page_result` 메소드 사용
+- `/app/api/schemas/common_pagenation.py`에 정의된 `PagedResponse` 활용
+- 일관된 페이징 응답 구조 유지
+
+```python
+from app.api.schemas.common_pagenation import PagedResponse
+```
+
+## 🎯 개발 원칙
+
+### 코드 품질
+- **일관성**: 기존 코드 스타일과 구조를 따라 일관성 유지
+- **가독성**: 명확하고 이해하기 쉬운 코드 작성
+- **완성도**: TODO나 플레이스홀더 없이 완전한 코드 작성
+
+### 네이밍 규칙
+- **파일명**: snake_case 사용 (예: `user_controller.py`)
+- **클래스명**: PascalCase 사용
+- **함수/변수명**: snake_case 사용
+
+### 에러 처리
+- 적절한 HTTP 상태 코드 사용
+- 사용자 친화적인 에러 메시지 제공
+- `/app/exceptions/custom_exceptions.py` 참고
+
+## 📚 참고 파일들
+
+개발 시 다음 파일들을 참고하여 패턴을 따라주세요:
+
+- **컨트롤러 예시**: `/app/api/v1/endpoints/routine_marketing_controller.py`
+- **서비스 패턴**: `/app/services/` 내의 기존 서비스들
+- **모델 구조**: `/app/db/models/` 내의 기존 모델들
+- **레포지토리 패턴**: `/app/db/repositories/base_repository.py`
+- **의존성 주입**: `/app/config/di.py`
+- **응답 헬퍼**: `/app/utils/response_helper.py`
+
+## ⚡ 작업 흐름
+
+1. 기존 코드를 먼저 분석하여 패턴과 구조를 파악
+2. 위의 순서대로 단계별 개발 진행
+3. 각 단계에서 기존 파일들을 참고하여 일관성 유지
+4. 완료 후 `/app/api/v1/__init__.py`에 라우터 등록 확인
+
+이 가이드라인을 따라 고품질의 일관된 API를 개발해주세요. 

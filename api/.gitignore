@@ -1,0 +1,6 @@
+path/
+*.pyc
+__pycache__/
+.env
+.idea/
+#poetry.lock

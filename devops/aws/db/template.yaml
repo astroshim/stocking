@@ -1,0 +1,247 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: keauty database
+
+# 환경 설정을 위한 파라미터
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment
+  
+  NetworkStackName:
+    Type: String
+    Default: network-infrastructure
+    Description: Name of the network infrastructure stack
+  
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    Description: Database instance class
+  
+  DBName:
+    Type: String
+    Default: mydb
+    Description: Database name
+  
+  DBUsername:
+    Type: String
+    Default: admin
+    Description: Database master username
+  
+  DBPassword:
+    Type: String
+    NoEcho: true
+    Description: Database master password
+  
+  # 스토리지 관련 파라미터
+  DBAllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: Initial allocated storage size in GB
+  
+  DBMaxAllocatedStorage:
+    Type: Number
+    Default: 100
+    Description: Maximum allocated storage size in GB for autoscaling
+  
+  DBStorageType:
+    Type: String
+    Default: gp2
+    AllowedValues:
+      - standard
+      - gp2
+      - gp3
+      - io1
+    Description: Storage type for the database
+  
+  DBIops:
+    Type: Number
+    Default: 0
+    Description: Provisioned IOPS (only applicable for io1 or gp3 storage types, 0 for default)
+  
+  DBEnableStorageAutoscaling:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+    Description: Enable storage autoscaling
+  
+  # 백업 관련 파라미터
+  DBBackupRetentionPeriod:
+    Type: Number
+    Default: 7
+    Description: Backup retention period in days
+  
+  DBMultiAZ:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+    Description: Enable Multi-AZ deployment
+  
+  DBStorageEncrypted:
+    Type: String
+    Default: true
+    AllowedValues:
+      - true
+      - false
+    Description: Enable storage encryption
+
+Conditions:
+  IsProvisionalIOPS: !Or [
+    !Equals [!Ref DBStorageType, io1],
+    !Equals [!Ref DBStorageType, gp3]
+  ]
+  EnableStorageAutoscaling: !Equals [!Ref DBEnableStorageAutoscaling, true]
+  IsProd: !Equals [!Ref Environment, prod]
+
+Resources:
+  # DB 서브넷 그룹
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupName: !Sub ${Environment}-db-subnet-group
+      DBSubnetGroupDescription: !Sub ${Environment} database subnet group
+      SubnetIds:
+        - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet1Id
+        - Fn::ImportValue: !Sub ${NetworkStackName}-PrivateSubnet2Id
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment}-db-subnet-group
+        - Key: Environment
+          Value: !Ref Environment
+
+  # DB 파라미터 그룹
+  DBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Properties:
+      Description: !Sub ${Environment} MySQL parameter group
+      Family: mysql8.0
+      Parameters:
+        max_connections: '100'
+        character_set_server: 'utf8mb4'
+        collation_server: 'utf8mb4_unicode_ci'
+        innodb_buffer_pool_size: '{DBInstanceClassMemory*3/4}'
+        innodb_file_per_table: 'ON'
+        slow_query_log: '1'
+        long_query_time: '2'
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment}-mysql-param-group
+        - Key: Environment
+          Value: !Ref Environment
+
+  # DB 인스턴스
+  DBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub ${Environment}-mysql-db
+      AllocatedStorage: !Ref DBAllocatedStorage
+      MaxAllocatedStorage: !If [EnableStorageAutoscaling, !Ref DBMaxAllocatedStorage, !Ref 'AWS::NoValue']
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: mysql
+      EngineVersion: 8.0.40
+      MasterUsername: !Ref DBUsername
+      MasterUserPassword: !Ref DBPassword
+      DBName: !Ref DBName
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - Fn::ImportValue: !Sub ${NetworkStackName}-DatabaseSecurityGroupId
+      MultiAZ: !Ref DBMultiAZ
+      StorageType: !Ref DBStorageType
+      Iops: !If [IsProvisionalIOPS, !Ref DBIops, !Ref 'AWS::NoValue']
+      BackupRetentionPeriod: !Ref DBBackupRetentionPeriod
+      PreferredBackupWindow: 02:00-03:00
+      PreferredMaintenanceWindow: sun:04:00-sun:05:00
+      DBParameterGroupName: !Ref DBParameterGroup
+      PubliclyAccessible: false
+      StorageEncrypted: !Ref DBStorageEncrypted
+      CopyTagsToSnapshot: true
+      EnablePerformanceInsights: !If [IsProd, true, false]
+      PerformanceInsightsRetentionPeriod: !If [IsProd, 7, !Ref 'AWS::NoValue']
+      EnableCloudwatchLogsExports:
+        - error
+        - general
+        - slowquery
+        - audit
+      MonitoringInterval: !If [IsProd, 60, 0]
+      MonitoringRoleArn: !If [IsProd, !GetAtt RDSMonitoringRole.Arn, !Ref 'AWS::NoValue']
+      DeletionProtection: !If [IsProd, true, false]
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment}-mysql-db
+        - Key: Environment
+          Value: !Ref Environment
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+
+  # RDS 모니터링 역할 (프로덕션 전용)
+  RDSMonitoringRole:
+    Type: AWS::IAM::Role
+    Condition: IsProd
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: monitoring.rds.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole
+      Path: /
+      Tags:
+        - Key: Name
+          Value: !Sub ${Environment}-rds-monitoring-role
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  DBInstanceId:
+    Description: Database instance ID
+    Value: !Ref DBInstance
+    Export:
+      Name: !Sub ${AWS::StackName}-DBInstanceId
+  
+  DBEndpoint:
+    Description: Database endpoint address
+    Value: !GetAtt DBInstance.Endpoint.Address
+    Export:
+      Name: !Sub ${AWS::StackName}-DBEndpoint
+  
+  DBPort:
+    Description: Database endpoint port
+    Value: !GetAtt DBInstance.Endpoint.Port
+    Export:
+      Name: !Sub ${AWS::StackName}-DBPort
+  
+  DBName:
+    Description: Database name
+    Value: !Ref DBName
+    Export:
+      Name: !Sub ${AWS::StackName}-DBName
+  
+  DBUsername:
+    Description: Database master username
+    Value: !Ref DBUsername
+    Export:
+      Name: !Sub ${AWS::StackName}-DBUsername
+  
+  DBStorageAllocated:
+    Description: Allocated storage size
+    Value: !Ref DBAllocatedStorage
+    Export:
+      Name: !Sub ${AWS::StackName}-DBStorageAllocated
+  
+  DBStorageType:
+    Description: Storage type
+    Value: !Ref DBStorageType
+    Export:
+      Name: !Sub ${AWS::StackName}-DBStorageType

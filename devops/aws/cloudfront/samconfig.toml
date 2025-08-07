@@ -1,0 +1,11 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "keauty-cloudfront-distribution"
+s3_bucket = "aws-sam-cli-keauty" #
+s3_prefix = "keauty-cloudfront-distribution"
+region = "ap-northeast-2"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "BucketName=keauty-challenge BucketRegion=ap-northeast-2 DomainName=media.mostart.co.kr AcmCertificateArn=arn:aws:acm:us-east-1:775405889390:certificate/df25bbd8-1b1f-487e-8ef4-2adefff18e17"
