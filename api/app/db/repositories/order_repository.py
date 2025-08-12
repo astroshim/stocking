@@ -253,3 +253,28 @@ class OrderRepository(BaseRepository):
             query = query.filter(Order.id.in_(order_ids))
         
         return query.all()
+
+    def get_pending_sell_reserved_quantity(self, user_id: str, stock_id: str, exclude_order_id: Optional[str] = None) -> Decimal:
+        """대기중/부분체결 SELL 주문들의 남은 수량 합계를 반환합니다.
+        exclude_order_id가 주어지면 해당 주문은 계산에서 제외합니다.
+        """
+        query = self.session.query(Order).filter(
+            and_(
+                Order.user_id == user_id,
+                Order.stock_id == stock_id,
+                Order.order_type == OrderType.SELL,
+                or_(
+                    Order.order_status == OrderStatus.PENDING,
+                    Order.order_status == OrderStatus.PARTIALLY_FILLED
+                )
+            )
+        )
+        if exclude_order_id:
+            query = query.filter(Order.id != exclude_order_id)
+        pending_orders = query.all()
+        reserved = Decimal('0')
+        for o in pending_orders:
+            remaining = (o.quantity - o.executed_quantity)
+            if remaining > 0:
+                reserved += remaining
+        return reserved

@@ -151,6 +151,13 @@ class Transaction:
 
 자세한 데이터베이스 관리 방법은 [DATABASE.md](DATABASE.md)를 참고하세요.
 
+
+### 테스트
+
+```
+PYTHON_ENV=development DATABASE_URI='sqlite:///:memory:' JWT_SECRET_KEY='dev' uv run pytest -q tests/test_order_flow.py
+```
+
 ### 빠른 시작
 
 ```bash

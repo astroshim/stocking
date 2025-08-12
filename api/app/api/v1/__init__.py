@@ -12,7 +12,7 @@ api_v1_router.include_router(user_controller.router, prefix="/users", tags=["사
 # api_v1_router.include_router(report_controller.router, prefix="/reports", tags=["신고 관리"])
 # api_v1_router.include_router(comment_controller.router, prefix="/comments", tags=["댓글 관리"])
 # api_v1_router.include_router(role_controller.router, prefix="/roles", tags=["역할 관리"])
-# api_v1_router.include_router(payment_controller.router, prefix="/payments", tags=["결제 관리"])
+api_v1_router.include_router(payment_controller.router, prefix="/payments", tags=["결제 관리"])
 # api_v1_router.include_router(notice_controller.router, prefix="/notices", tags=["공지사항 관리"])
 # api_v1_router.include_router(storage_controller.router, prefix="/storages", tags=["스토리지 관리"])
 

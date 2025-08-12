@@ -3,7 +3,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from app.db.models.portfolio import VirtualBalance, VirtualBalanceHistory
+from app.db.models.virtual_balance import VirtualBalance, VirtualBalanceHistory
 from app.db.repositories.base_repository import BaseRepository
 
 
@@ -26,12 +26,6 @@ class VirtualBalanceRepository(BaseRepository):
             cash_balance=initial_cash,
             available_cash=initial_cash,
             invested_amount=Decimal('0'),
-            total_portfolio_value=Decimal('0'),
-            total_asset_value=initial_cash,
-            total_profit_loss=Decimal('0'),
-            total_profit_loss_rate=Decimal('0'),
-            daily_profit_loss=Decimal('0'),
-            daily_profit_loss_rate=Decimal('0'),
             total_buy_amount=Decimal('0'),
             total_sell_amount=Decimal('0'),
             total_commission=Decimal('0'),
@@ -64,7 +58,6 @@ class VirtualBalanceRepository(BaseRepository):
         previous_cash = virtual_balance.cash_balance
         virtual_balance.cash_balance += amount
         virtual_balance.available_cash += amount
-        virtual_balance.total_asset_value += amount
         virtual_balance.last_updated_at = datetime.now()
         
         # 이력 추가
@@ -91,7 +84,6 @@ class VirtualBalanceRepository(BaseRepository):
         previous_cash = virtual_balance.cash_balance
         virtual_balance.cash_balance -= amount
         virtual_balance.available_cash -= amount
-        virtual_balance.total_asset_value -= amount
         virtual_balance.last_updated_at = datetime.now()
         
         # 이력 추가

@@ -5,11 +5,12 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 
 from app.db.repositories.order_repository import OrderRepository
+from app.db.repositories.user_repository import UserRepository
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
 from app.db.repositories.portfolio_repository import PortfolioRepository
 from app.services.transaction_service import TransactionService
-from app.db.models.order import Order, OrderStatus, OrderType, OrderMethod
-from app.db.models.portfolio import VirtualBalance
+from app.db.models.order import Order, OrderStatus, OrderType, OrderMethod, ExitReason
+from app.db.models.virtual_balance import VirtualBalance
 from app.utils.transaction_manager import TransactionManager
 from app.exceptions.custom_exceptions import ValidationError, NotFoundError, InsufficientBalanceError
 
@@ -26,6 +27,11 @@ class OrderService:
     def create_order(self, user_id: str, order_data: Dict[str, Any]) -> Order:
         """새로운 주문을 생성합니다."""
         with TransactionManager.transaction(self.order_repository.session):
+            # 사용자 존재 여부 선검증 (FK 에러를 사전에 방지하고 명확한 오류 제공)
+            user_repo = UserRepository(self.order_repository.session)
+            if not user_repo.get_by_id(user_id):
+                raise NotFoundError("User not found")
+
             # 기본 주문 데이터 설정
             order_data['user_id'] = user_id
             order_data['order_status'] = OrderStatus.PENDING
@@ -35,13 +41,15 @@ class OrderService:
             order_data['tax'] = Decimal('0')
             order_data['total_fee'] = Decimal('0')
             
-            # 주문 유효성 검증
+            # 주문 유효성 검증 (컨트롤러에서 이미 DB Enum으로 변환됨)
             self._validate_order(order_data)
-            
+
+            print(f"-----------> order_data: {order_data}") 
             # 잔고 확인 및 예약
             if order_data['order_type'] == OrderType.BUY:
                 self._reserve_cash_for_buy_order(user_id, order_data)
             elif order_data['order_type'] == OrderType.SELL:
+                print(f"-----------> 매도 order_data: {order_data}") 
                 self._validate_sell_order(user_id, order_data)
             
             # 주문 생성
@@ -122,8 +130,25 @@ class OrderService:
             filtered_data = {k: v for k, v in update_data.items() if k in allowed_fields}
             
             # 수량 변경 시 잔고 재확인
-            if 'quantity' in filtered_data and order.order_type == OrderType.BUY:
-                self._validate_quantity_change(order, filtered_data['quantity'])
+            if 'quantity' in filtered_data:
+                if order.order_type == OrderType.BUY:
+                    self._validate_quantity_change(order, filtered_data['quantity'])
+                elif order.order_type == OrderType.SELL:
+                    # SELL 주문 수정 시 과다 매도 방지: 예약 수량 반영(본 주문 제외)
+                    reserved_quantity = self.order_repository.get_pending_sell_reserved_quantity(
+                        user_id, order.stock_id, exclude_order_id=order.id
+                    )
+                    portfolio = self.portfolio_repository.get_by_user_and_stock(user_id, order.stock_id)
+                    available_to_sell = portfolio.current_quantity - reserved_quantity
+                    new_quantity = filtered_data['quantity']
+                    # 이미 일부 체결되었으면 남은 수량 기준으로 비교
+                    remaining_to_sell = new_quantity - order.executed_quantity
+                    if remaining_to_sell < 0:
+                        remaining_to_sell = Decimal('0')
+                    if available_to_sell < remaining_to_sell:
+                        raise ValidationError(
+                            f"매도 가능 수량({available_to_sell})이 수정 후 남은 매도 수량({remaining_to_sell})보다 부족합니다"
+                        )
             
             updated_order = self.order_repository.update_order(order, filtered_data)
             logging.info(f"Order updated: {order_id} for user {user_id}")
@@ -135,7 +160,7 @@ class OrderService:
             order = self.get_order_by_id(user_id, order_id)
             
             if not self.order_repository.can_cancel_order(order):
-                raise ValidationError("Cannot cancel order in current status")
+                raise ValidationError("대기중이거나 부분체결된 주문만 취소 가능합니다.")
             
             # 매수 주문 취소 시 예약된 현금 반환
             if order.order_type == OrderType.BUY:
@@ -170,13 +195,10 @@ class OrderService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> Dict[str, Any]:
-        print("-----------> get_order_history")
         """주문 이력을 조회합니다."""
         orders = self.order_repository.get_order_history(user_id, page, size, start_date, end_date)
         total = self.order_repository.count_order_history(user_id, start_date, end_date)
 
-        print("-----------> orders", orders)
-        
         return {
             'orders': orders,
             'total': total,
@@ -209,14 +231,14 @@ class OrderService:
                 order, execution_price, remaining_quantity, commission, tax
             )
             
+            # 거래 내역을 먼저 생성하여 cash_before/after를 정확히 기록
+            self._create_transaction_for_execution(order, execution)
+            
             # 가상 잔고 업데이트
             self._update_virtual_balance_for_execution(order, execution)
             
             # 포트폴리오 업데이트
             self._update_portfolio_for_execution(order, execution)
-            
-            # 거래 내역 생성
-            self._create_transaction_for_execution(order, execution)
             
             logging.info(f"Order executed: {order_id} for user {user_id}")
             return order
@@ -235,14 +257,21 @@ class OrderService:
 
     def _reserve_cash_for_buy_order(self, user_id: str, order_data: Dict[str, Any]) -> None:
         """매수 주문을 위한 현금을 예약합니다."""
-        required_amount = order_data['quantity'] * order_data['order_price']
-        
+        amount = order_data['quantity'] * order_data['order_price']
+        # 예상 수수료(최소 500원) 및 세금(매수 시 0)
+        expected_commission = self._calculate_commission(amount)
+        expected_tax = Decimal('0')
+        required_amount = amount + expected_commission + expected_tax
+
         virtual_balance = self.virtual_balance_repository.get_by_user_id(user_id)
         if not virtual_balance or virtual_balance.available_cash < required_amount:
-            raise InsufficientBalanceError("Insufficient available cash for buy order")
-        
+            raise InsufficientBalanceError("Insufficient available cash for buy order (includes estimated fees)")
+
         # 사용 가능한 현금에서 차감 (주문 완료/취소 시까지 예약)
         virtual_balance.available_cash -= required_amount
+
+        # 변경사항을 DB에 즉시 반영
+        self.virtual_balance_repository.session.flush()
 
     def _validate_sell_order(self, user_id: str, order_data: Dict[str, Any]) -> None:
         """매도 주문을 검증합니다."""
@@ -251,13 +280,16 @@ class OrderService:
         
         # 포트폴리오에서 보유 수량 확인
         portfolio = self.portfolio_repository.get_by_user_and_stock(user_id, stock_id)
-        
+
         if not portfolio:
             raise ValidationError(f"주식 {stock_id}을(를) 보유하고 있지 않습니다")
         
-        if portfolio.current_quantity < sell_quantity:
+        # 대기/부분체결 SELL 주문의 잔여 수량 예약치를 반영하여 검증
+        reserved_quantity = self.order_repository.get_pending_sell_reserved_quantity(user_id, stock_id)
+        available_to_sell = portfolio.current_quantity - reserved_quantity
+        if available_to_sell < sell_quantity:
             raise ValidationError(
-                f"보유 수량({portfolio.current_quantity})이 매도 수량({sell_quantity})보다 부족합니다"
+                f"매도 가능 수량({available_to_sell})이 매도 요청 수량({sell_quantity})보다 부족합니다"
             )
 
     def _execute_market_order(self, order: Order) -> None:
@@ -270,24 +302,27 @@ class OrderService:
             order, current_price, order.quantity, commission, tax
         )
         
+        # 거래 내역을 먼저 생성하여 cash_before/after를 정확히 기록
+        self._create_transaction_for_execution(order, execution)
         self._update_virtual_balance_for_execution(order, execution)
         self._update_portfolio_for_execution(order, execution)
-        self._create_transaction_for_execution(order, execution)
 
     def _get_current_price(self, stock_id: str) -> Decimal:
         """현재가를 조회합니다. (실제로는 외부 API 호출)"""
         # TODO: 실제 주가 API 연동
         # 현재는 임시로 10000원 반환
-        return Decimal('10000')
+        raise ValidationError("시장가 is Not implemented")
 
     def _calculate_commission(self, amount: Decimal) -> Decimal:
         """거래 수수료를 계산합니다."""
+        return Decimal('0') 
         # 0.015% 수수료 (최소 500원)
         commission = amount * Decimal('0.00015')
         return max(commission, Decimal('500'))
 
     def _calculate_tax(self, amount: Decimal, order_type: OrderType) -> Decimal:
         """거래세를 계산합니다."""
+        return Decimal('0') 
         if order_type == OrderType.SELL:
             # 매도 시에만 0.23% 거래세
             return amount * Decimal('0.0023')
@@ -296,32 +331,80 @@ class OrderService:
     def _update_virtual_balance_for_execution(self, order: Order, execution) -> None:
         """체결에 따라 가상 잔고를 업데이트합니다."""
         execution_amount = execution.execution_amount
-        total_cost = execution_amount + order.commission + order.tax
-        
+
         if order.order_type == OrderType.BUY:
-            # 매수: 예약된 금액에서 실제 체결 금액 정산
-            reserved_amount = order.quantity * order.order_price
-            actual_amount = total_cost
-            difference = reserved_amount - actual_amount
-            
+            # 실행된 부분에 대한 예상 수수료(예약 시점과 동일한 방식)과 실제 수수료 비교
+            expected_commission = self._calculate_commission(execution_amount)
+            expected_tax = Decimal('0')  # 매수 시 세금 없음
+
+            actual_commission = execution.execution_fee
+            actual_tax = self._calculate_tax(execution_amount, order.order_type)
+
+            reserved_for_executed = execution_amount + expected_commission + expected_tax
+            actual_for_executed = execution_amount + actual_commission + actual_tax
+            difference = reserved_for_executed - actual_for_executed
+
             virtual_balance = self.virtual_balance_repository.get_by_user_id(order.user_id)
-            virtual_balance.available_cash += difference  # 차액 반환
-            virtual_balance.cash_balance -= actual_amount  # 실제 금액 차감
+            # 예약 환불(차액만큼 반환) + 실제 현금 차감
+            previous_cash = virtual_balance.cash_balance
+            virtual_balance.available_cash += difference
+            virtual_balance.cash_balance -= actual_for_executed
+            # 총계 누적 및 원가(=체결금액) 투자 증가
+            virtual_balance.total_buy_amount += execution_amount
+            virtual_balance.total_commission += (actual_commission or Decimal('0'))
+            virtual_balance.total_tax += (actual_tax or Decimal('0'))
             virtual_balance.invested_amount += execution_amount
-            
+            # 이력 기록 (BUY)
+            try:
+                self.virtual_balance_repository._add_balance_history(
+                    virtual_balance_id=virtual_balance.id,
+                    previous_cash=previous_cash,
+                    new_cash=virtual_balance.cash_balance,
+                    change_amount=-actual_for_executed,
+                    change_type='BUY',
+                    related_order_id=order.id,
+                    description=f"BUY executed: {execution.execution_quantity} @ {execution.execution_price}"
+                )
+            except Exception:
+                pass
+
         elif order.order_type == OrderType.SELL:
-            # 매도: 현금 증가
-            net_amount = execution_amount - order.commission - order.tax
+            # 매도: 실행 금액에서 수수료/세금 차감한 순입금 처리
+            actual_commission = execution.execution_fee
+            actual_tax = self._calculate_tax(execution_amount, order.order_type)
+            net_amount = execution_amount - actual_commission - actual_tax
+
             virtual_balance = self.virtual_balance_repository.get_by_user_id(order.user_id)
+            previous_cash = virtual_balance.cash_balance
             virtual_balance.cash_balance += net_amount
             virtual_balance.available_cash += net_amount
-            virtual_balance.invested_amount -= execution_amount
+            # 총계 누적
+            virtual_balance.total_sell_amount += execution_amount
+            virtual_balance.total_commission += (actual_commission or Decimal('0'))
+            virtual_balance.total_tax += (actual_tax or Decimal('0'))
+            # 이력 기록 (SELL)
+            try:
+                self.virtual_balance_repository._add_balance_history(
+                    virtual_balance_id=virtual_balance.id,
+                    previous_cash=previous_cash,
+                    new_cash=virtual_balance.cash_balance,
+                    change_amount=net_amount,
+                    change_type='SELL',
+                    related_order_id=order.id,
+                    description=f"SELL executed: {execution.execution_quantity} @ {execution.execution_price}"
+                )
+            except Exception:
+                pass
 
     def _release_reserved_cash(self, order: Order) -> None:
         """취소된 매수 주문의 예약 현금을 반환합니다."""
         if order.order_type == OrderType.BUY:
             remaining_quantity = order.quantity - order.executed_quantity
-            reserved_amount = remaining_quantity * order.order_price
+            amount = remaining_quantity * order.order_price
+            # 예약 시점과 동일한 방식으로 수수료 계산
+            expected_commission = self._calculate_commission(amount)
+            expected_tax = Decimal('0')
+            reserved_amount = amount + expected_commission + expected_tax
             
             virtual_balance = self.virtual_balance_repository.get_by_user_id(order.user_id)
             virtual_balance.available_cash += reserved_amount
@@ -358,7 +441,27 @@ class OrderService:
                 
         elif order.order_type == OrderType.SELL:
             if portfolio:
-                # 매도 업데이트
+                # SELL 체결의 손익에 따라 주문의 exit_reason 자동 설정 (평균단가 대비)
+                try:
+                    if price > portfolio.average_price:
+                        order.exit_reason = ExitReason.TAKE_PROFIT
+                    elif price < portfolio.average_price:
+                        order.exit_reason = ExitReason.STOP_LOSS
+                    else:
+                        order.exit_reason = None
+                except Exception:
+                    # 비교 실패 시 설정 생략
+                    order.exit_reason = None
+
+                # 매도 업데이트 (원가 기준 invested_amount 감소)
+                cost_basis_reduction = portfolio.average_price * quantity
+                vb = self.virtual_balance_repository.get_by_user_id(user_id)
+                if vb.invested_amount <= cost_basis_reduction:
+                    vb.invested_amount = Decimal('0')
+                else:
+                    vb.invested_amount -= cost_basis_reduction
+
+                # 포트폴리오 수량/평단 업데이트
                 self.portfolio_repository.update_portfolio_sell(portfolio, quantity, price)
                 
                 # 보유 수량이 0이 되면 포트폴리오 삭제

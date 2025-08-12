@@ -13,10 +13,20 @@ if config.PYTHON_ENV == "development":
 else:
     sqlalchemy_logger.setLevel(logging.WARNING)
 
+# 엔진 옵션을 DB 종류에 따라 조정 (sqlite는 일부 옵션이 호환되지 않음)
+engine_options = dict(config.DATABASE_ENGINE_OPTIONS or {})
+if str(config.DATABASE_URI).startswith("sqlite"):
+    # SQLite 전용 최소 옵션
+    engine_options = {
+        'connect_args': {
+            'check_same_thread': False
+        }
+    }
+
 engine = create_engine(
     config.DATABASE_URI,
     echo=False,
-    **config.DATABASE_ENGINE_OPTIONS
+    **engine_options
 )
 
 # 세션 생성

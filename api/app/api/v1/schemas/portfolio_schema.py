@@ -63,12 +63,6 @@ class VirtualBalanceResponse(InitVarModel):
     cash_balance: Decimal
     available_cash: Decimal
     invested_amount: Decimal
-    total_portfolio_value: Decimal
-    total_asset_value: Decimal
-    total_profit_loss: Decimal
-    total_profit_loss_rate: Decimal
-    daily_profit_loss: Decimal
-    daily_profit_loss_rate: Decimal
     total_buy_amount: Decimal
     total_sell_amount: Decimal
     total_commission: Decimal

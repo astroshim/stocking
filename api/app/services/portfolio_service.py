@@ -6,7 +6,8 @@ from datetime import datetime, date
 from app.db.repositories.portfolio_repository import PortfolioRepository
 from app.db.repositories.watchlist_repository import WatchListRepository
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
-from app.db.models.portfolio import Portfolio, VirtualBalanceHistory
+from app.db.models.portfolio import Portfolio
+from app.db.models.virtual_balance import VirtualBalanceHistory
 from app.db.models.transaction import WatchList
 from app.utils.simple_paging import SimplePage
 
@@ -38,32 +39,38 @@ class PortfolioService:
         # 포트폴리오 데이터 변환
         portfolio_data = []
         for portfolio in paged_portfolios:
-            # TODO: 실제 주식 가격 및 정보 조회 필요
-            current_price = portfolio.average_price  # 임시로 평균 매수가 사용
-            
+            # TODO: 실제 주식 가격 조회 로직 필요 (임시로 평균 매수가 사용)
+            current_price = portfolio.average_price
+
             current_value = portfolio.current_quantity * current_price
             invested_amount = portfolio.current_quantity * portfolio.average_price
-            profit_loss = current_value - invested_amount
-            profit_loss_rate = (
-                (profit_loss / invested_amount * 100) 
+            unrealized_profit_loss = current_value - invested_amount
+            unrealized_profit_loss_rate = (
+                (unrealized_profit_loss / invested_amount * 100)
                 if invested_amount > 0 else Decimal('0')
             )
-            
+
             portfolio_data.append({
                 'id': portfolio.id,
+                'user_id': portfolio.user_id,
                 'stock_id': portfolio.stock_id,
-                'stock_code': portfolio.stock_id,  # 임시로 stock_id 사용
-                'stock_name': f"주식 {portfolio.stock_id}",  # 임시 이름
-                'market': "KRX",  # 임시 값
-                'sector': "기타",  # 임시 값
-                'current_quantity': portfolio.current_quantity,
-                'average_price': float(portfolio.average_price),
-                'current_price': float(current_price),
-                'current_value': float(current_value),
-                'invested_amount': float(invested_amount),
-                'profit_loss': float(profit_loss),
-                'profit_loss_rate': float(profit_loss_rate),
-                'updated_at': portfolio.updated_at.isoformat()
+                'quantity': portfolio.current_quantity,
+                'average_buy_price': portfolio.average_price,
+                'total_buy_amount': portfolio.current_quantity * portfolio.average_price,
+                'current_value': current_value,
+                'unrealized_profit_loss': unrealized_profit_loss,
+                'unrealized_profit_loss_rate': unrealized_profit_loss_rate,
+                'realized_profit_loss': portfolio.realized_profit_loss,
+                'first_buy_date': portfolio.first_buy_date,
+                'last_buy_date': portfolio.last_buy_date,
+                'last_sell_date': portfolio.last_sell_date,
+                'last_updated_at': portfolio.last_updated_at,
+                'is_active': portfolio.is_active,
+                'notes': portfolio.notes,
+                'created_at': portfolio.created_at,
+                'updated_at': portfolio.updated_at,
+                'stock_name': f"주식 {portfolio.stock_id}",
+                'current_price': current_price,
             })
         
         return SimplePage(
@@ -115,40 +122,38 @@ class PortfolioService:
         if not portfolio:
             return None
         
-        # TODO: 실제 주식 가격 및 정보 조회 필요
-        current_price = portfolio.average_price  # 임시로 평균 매수가 사용
-        
+        # TODO: 실제 주식 가격 조회 로직 필요 (임시로 평균 매수가 사용)
+        current_price = portfolio.average_price
+
         current_value = portfolio.current_quantity * current_price
         invested_amount = portfolio.current_quantity * portfolio.average_price
-        profit_loss = current_value - invested_amount
-        profit_loss_rate = (
-            (profit_loss / invested_amount * 100) 
+        unrealized_profit_loss = current_value - invested_amount
+        unrealized_profit_loss_rate = (
+            (unrealized_profit_loss / invested_amount * 100)
             if invested_amount > 0 else Decimal('0')
         )
-        
+
         return {
             'id': portfolio.id,
-            'stock': {
-                'id': portfolio.stock_id,
-                'code': portfolio.stock_id,
-                'name': f"주식 {portfolio.stock_id}",  # 임시 이름
-                'market': "KRX",  # 임시 값
-                'sector': "기타",  # 임시 값
-                'industry': "기타",  # 임시 값
-                'current_price': float(current_price),
-                'price_change': 0,  # TODO: 전일대비 변동률 계산
-                'price_change_rate': 0
-            },
-            'current_quantity': portfolio.current_quantity,
-            'total_quantity': portfolio.total_quantity,
-            'average_price': float(portfolio.average_price),
-            'total_invested_amount': float(portfolio.total_invested_amount),
-            'current_value': float(current_value),
-            'profit_loss': float(profit_loss),
-            'profit_loss_rate': float(profit_loss_rate),
-            'realized_profit_loss': float(portfolio.realized_profit_loss),
-            'created_at': portfolio.created_at.isoformat(),
-            'updated_at': portfolio.updated_at.isoformat()
+            'user_id': portfolio.user_id,
+            'stock_id': portfolio.stock_id,
+            'quantity': portfolio.current_quantity,
+            'average_buy_price': portfolio.average_price,
+            'total_buy_amount': portfolio.current_quantity * portfolio.average_price,
+            'current_value': current_value,
+            'unrealized_profit_loss': unrealized_profit_loss,
+            'unrealized_profit_loss_rate': unrealized_profit_loss_rate,
+            'realized_profit_loss': portfolio.realized_profit_loss,
+            'first_buy_date': portfolio.first_buy_date,
+            'last_buy_date': portfolio.last_buy_date,
+            'last_sell_date': portfolio.last_sell_date,
+            'last_updated_at': portfolio.last_updated_at,
+            'is_active': portfolio.is_active,
+            'notes': portfolio.notes,
+            'created_at': portfolio.created_at,
+            'updated_at': portfolio.updated_at,
+            'stock_name': f"주식 {portfolio.stock_id}",
+            'current_price': current_price,
         }
 
     def get_balance_history(

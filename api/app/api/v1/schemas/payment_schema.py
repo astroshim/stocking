@@ -51,13 +51,8 @@ class VirtualBalanceResponse(InitVarModel):
     id: str
     user_id: str
     cash_balance: float
-    invested_amount: float
-    total_asset_value: float
     available_cash: float
-    total_profit_loss: float
-    total_profit_loss_rate: float
-    daily_profit_loss: float
-    daily_profit_loss_rate: float
+    invested_amount: float
     total_buy_amount: float
     total_sell_amount: float
     total_commission: float

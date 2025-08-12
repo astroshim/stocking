@@ -10,7 +10,7 @@ from . import (
     # notice_controller,
     # report_controller,
     # role_controller,
-    # payment_controller,
+    payment_controller,
     # storage_controller,
 )
 
@@ -21,4 +21,5 @@ __all__ = [
     "order_controller",
     "portfolio_controller", 
     "trading_controller",
+    "payment_controller",
 ]

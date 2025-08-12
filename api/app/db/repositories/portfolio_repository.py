@@ -46,9 +46,7 @@ class PortfolioRepository(BaseRepository):
             user_id=user_id,
             stock_id=stock_id,
             current_quantity=quantity,
-            total_quantity=quantity,
             average_price=average_price,
-            total_invested_amount=average_price * quantity,
             first_buy_date=now,
             last_buy_date=now,
             last_updated_at=now
@@ -67,14 +65,11 @@ class PortfolioRepository(BaseRepository):
         """매수 시 포트폴리오 업데이트"""
         from datetime import datetime
         
-        # 평균 단가 계산
-        total_amount = portfolio.total_invested_amount + (price * quantity)
-        total_quantity = portfolio.total_quantity + quantity
-        
-        portfolio.average_price = total_amount / total_quantity
-        portfolio.current_quantity += quantity
-        portfolio.total_quantity = total_quantity
-        portfolio.total_invested_amount = total_amount
+        # 평균 단가 계산 (총량/총원가 없이 이동평균)
+        new_total_amount = (portfolio.average_price * portfolio.current_quantity) + (price * quantity)
+        new_total_quantity = portfolio.current_quantity + quantity
+        portfolio.average_price = (new_total_amount / new_total_quantity) if new_total_quantity > 0 else Decimal('0')
+        portfolio.current_quantity = new_total_quantity
         portfolio.last_buy_date = datetime.now()
         portfolio.last_updated_at = datetime.now()
         
@@ -90,9 +85,8 @@ class PortfolioRepository(BaseRepository):
         if portfolio.current_quantity < quantity:
             raise ValueError("보유 수량이 부족합니다")
         
-        # 실현 손익 계산
+        # 실현 손익 계산 (매도 가격 - 기존 평단) * 수량
         realized_profit_loss = (price - portfolio.average_price) * quantity
-        
         portfolio.current_quantity -= quantity
         portfolio.realized_profit_loss += realized_profit_loss
         

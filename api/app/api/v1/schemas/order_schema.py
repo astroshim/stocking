@@ -3,36 +3,29 @@ from typing import Optional, List
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from app.db.models.order import OrderType, OrderMethod, OrderStatus, ExitReason
+from enum import Enum
 
 from app.api.schemas.common_pagenation import PagedResponse
 from app.api.schemas.init_var_model import InitVarModel
 
 
-class OrderTypeEnum(str, Enum):
-    BUY = "BUY"
-    SELL = "SELL"
-
-
-class OrderMethodEnum(str, Enum):
-    MARKET = "MARKET"
-    LIMIT = "LIMIT"
-    STOP_LOSS = "STOP_LOSS"
-    TAKE_PROFIT = "TAKE_PROFIT"
-
-
-class OrderStatusEnum(str, Enum):
-    PENDING = "PENDING"
-    PARTIALLY_FILLED = "PARTIALLY_FILLED"
-    FILLED = "FILLED"
-    CANCELLED = "CANCELLED"
-    REJECTED = "REJECTED"
-    EXPIRED = "EXPIRED"
+"""
+API 스키마에서 별도의 Enum을 정의하지 않고, 도메인 모델(Enum)을 단일 소스로 사용합니다.
+Pydantic은 표준 Enum을 정상적으로 직렬화/검증하므로 OpenAPI에도 문자열 값으로 노출됩니다.
+"""
 
 
 class OrderBase(BaseModel):
     stock_id: str = Field(..., description="주식 종목 ID")
-    order_type: OrderTypeEnum = Field(..., description="주문 유형")
-    order_method: OrderMethodEnum = Field(..., description="주문 방식")
+    order_type: OrderType = Field(
+        ..., 
+        description="주문 유형 (BUY=매수, SELL=매도)"
+    )
+    order_method: OrderMethod = Field(
+        ..., 
+        description="주문 방식 (MARKET=시장가, LIMIT=지정가)"
+    )
     quantity: Decimal = Field(..., gt=0, description="주문 수량")
 
 
@@ -40,8 +33,7 @@ class OrderCreate(OrderBase):
     order_price: Optional[Decimal] = Field(None, description="주문 가격 (지정가 주문시)")
     expires_at: Optional[datetime] = Field(None, description="주문 만료일시")
     notes: Optional[str] = Field(None, description="주문 메모")
-
-
+    
 class OrderUpdate(BaseModel):
     order_price: Optional[Decimal] = Field(None, description="주문 가격")
     quantity: Optional[Decimal] = Field(None, gt=0, description="주문 수량")
@@ -57,9 +49,12 @@ class OrderResponse(InitVarModel):
     id: str
     user_id: str
     stock_id: str
-    order_type: OrderTypeEnum
-    order_method: OrderMethodEnum
-    order_status: OrderStatusEnum
+    order_type: OrderType
+    order_method: OrderMethod
+    order_status: OrderStatus = Field(
+        ..., 
+        description="주문 상태 (PENDING=대기중, PARTIALLY_FILLED=부분체결, FILLED=체결완료, CANCELLED=취소됨, REJECTED=거부됨, EXPIRED=만료됨)"
+    )
     quantity: Decimal
     order_price: Optional[Decimal]
     executed_quantity: Decimal
@@ -73,6 +68,7 @@ class OrderResponse(InitVarModel):
     cancelled_date: Optional[datetime]
     expires_at: Optional[datetime]
     notes: Optional[str]
+    exit_reason: Optional[ExitReason]
     is_simulated: bool
     created_at: datetime
     updated_at: datetime
@@ -99,8 +95,11 @@ class OrderListResponse(PagedResponse[OrderWithExecutionsResponse]):
 
 class OrderSearchRequest(BaseModel):
     stock_id: Optional[str] = Field(None, description="주식 종목 ID")
-    order_type: Optional[OrderTypeEnum] = Field(None, description="주문 유형")
-    order_status: Optional[OrderStatusEnum] = Field(None, description="주문 상태")
+    order_type: Optional[OrderType] = Field(None, description="주문 유형 (BUY=매수, SELL=매도)")
+    order_status: Optional[OrderStatus] = Field(
+        None, 
+        description="주문 상태 (PENDING=대기중, PARTIALLY_FILLED=부분체결, FILLED=체결완료, CANCELLED=취소됨, REJECTED=거부됨, EXPIRED=만료됨)"
+    )
     start_date: Optional[datetime] = Field(None, description="검색 시작일")
     end_date: Optional[datetime] = Field(None, description="검색 종료일")
 
@@ -118,7 +117,7 @@ class OrderSummaryResponse(BaseModel):
 class QuickOrderRequest(BaseModel):
     """빠른 주문 요청 (시장가 매수/매도)"""
     stock_id: str = Field(..., description="주식 종목 ID")
-    order_type: OrderTypeEnum = Field(..., description="주문 유형")
+    order_type: OrderType = Field(..., description="주문 유형 (BUY=매수, SELL=매도)")
     amount: Optional[Decimal] = Field(None, description="매수 금액 (매수시)")
     quantity: Optional[Decimal] = Field(None, description="매도 수량 (매도시)")
     

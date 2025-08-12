@@ -10,9 +10,9 @@ from app.config.di import get_order_service
 from app.services.order_service import OrderService
 from app.api.v1.schemas.order_schema import (
     OrderCreate, OrderUpdate, OrderCancel, OrderResponse, OrderWithExecutionsResponse,
-    OrderListResponse, OrderSearchRequest, OrderSummaryResponse, QuickOrderRequest,
-    OrderStatusEnum, OrderTypeEnum
+    OrderListResponse, OrderSearchRequest, OrderSummaryResponse, QuickOrderRequest
 )
+from app.db.models.order import OrderStatus, OrderType, OrderMethod
 from app.utils.response_helper import create_response
 from app.utils.simple_paging import SimplePage
 from app.exceptions.custom_exceptions import ValidationError, NotFoundError, InsufficientBalanceError
@@ -33,7 +33,8 @@ async def create_order(
     - 손절매/이익실현 주문 지원
     """
     try:
-        order = order_service.create_order(current_user_id, order_data.model_dump())
+        # Pydantic이 모델 Enum으로 파싱하므로 그대로 전달
+        order = order_service.create_order(current_user_id, order_data.model_dump(mode='python'))
         order_response = OrderResponse.model_validate(order)
         
         return create_response(
@@ -86,8 +87,8 @@ async def create_quick_order(
 async def get_orders(
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(20, ge=1, le=100, description="페이지 크기"),
-    status: Optional[OrderStatusEnum] = Query(None, description="주문 상태"),
-    order_type: Optional[OrderTypeEnum] = Query(None, description="주문 유형"),
+    status: Optional[OrderStatus] = Query(None, description="주문 상태"),
+    order_type: Optional[OrderType] = Query(None, description="주문 유형"),
     stock_id: Optional[str] = Query(None, description="주식 종목 ID"),
     current_user_id: str = Depends(get_current_user),
     order_service: OrderService = Depends(get_order_service)
@@ -319,4 +320,27 @@ async def execute_order(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"주문 체결 실패: {str(e)}")
 
+
+@router.post("/orders/{order_id}", summary="주문 체결 (주문가로 체결)")
+async def fill_order(
+    order_id: str,
+    current_user_id: str = Depends(get_current_user),
+    order_service: OrderService = Depends(get_order_service)
+):
+    """간단 체결 API. 주문 가격으로 체결합니다."""
+    try:
+        # 주문 정보를 조회하여 주문가로 체결
+        order = order_service.get_order_by_id(current_user_id, order_id)
+        executed_order = order_service.execute_order(current_user_id, order_id, Decimal(order.order_price))
+        order_response = OrderResponse.model_validate(executed_order)
+        return create_response(
+            data=order_response.model_dump(),
+            message="주문이 성공적으로 체결되었습니다."
+        )
+    except NotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"주문 체결 실패: {str(e)}")
 

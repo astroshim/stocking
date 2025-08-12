@@ -17,8 +17,6 @@ class OrderMethod(enum.Enum):
     """주문 방식"""
     MARKET = "MARKET"     # 시장가
     LIMIT = "LIMIT"       # 지정가
-    STOP_LOSS = "STOP_LOSS"   # 손절매
-    TAKE_PROFIT = "TAKE_PROFIT"  # 이익실현
 
 
 class OrderStatus(enum.Enum):
@@ -29,6 +27,12 @@ class OrderStatus(enum.Enum):
     CANCELLED = "CANCELLED"       # 취소됨
     REJECTED = "REJECTED"         # 거부됨
     EXPIRED = "EXPIRED"           # 만료됨
+
+
+class ExitReason(enum.Enum):
+    """매도 사유 (SELL 주문에 한해 기록)"""
+    STOP_LOSS = "STOP_LOSS"       # 손절매
+    TAKE_PROFIT = "TAKE_PROFIT"   # 이익실현
 
 
 class Order(UUIDMixin, Base):
@@ -61,6 +65,7 @@ class Order(UUIDMixin, Base):
     
     # 기타 정보
     notes = Column(Text, nullable=True, comment='주문 메모')
+    exit_reason = Column(SQLEnum(ExitReason), nullable=True, comment='매도 사유 (SELL 주문시: STOP_LOSS/TAKE_PROFIT)')
     is_simulated = Column(Boolean, nullable=False, default=True, comment='가상거래 여부')
     created_at = Column(DateTime, nullable=False, default=datetime.now)
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)

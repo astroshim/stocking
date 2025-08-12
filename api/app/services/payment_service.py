@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, Union
 from sqlalchemy.orm import Session
 
 from app.db.models.user import User
-from app.db.models.portfolio import VirtualBalance
+from app.db.models.virtual_balance import VirtualBalance
 from app.db.models.payment_status import PaymentStatus
 from app.db.repositories.user_repository import UserRepository
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
