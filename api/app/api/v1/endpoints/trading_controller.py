@@ -272,7 +272,7 @@ async def get_market_data(
     - 섹터별 성과
     """
     try:
-        # 임시 시장 데이터 (실제로는 외부 API 연동)
+        # 임시 시장 데이터 (실제로는 toss API 연동)
         market_indices = [
             {"name": "KOSPI", "value": 2580.50, "change": 15.30, "change_rate": 0.60},
             {"name": "KOSDAQ", "value": 850.20, "change": -8.50, "change_rate": -0.99},

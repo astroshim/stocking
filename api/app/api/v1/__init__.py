@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import user_controller, report_controller, \
     storage_controller, auth_controller, comment_controller, role_controller, payment_controller, \
-    notice_controller, stock_controller, order_controller, portfolio_controller, trading_controller
+    notice_controller, stock_controller, order_controller, portfolio_controller, trading_controller, ws_controller, toss_requester_controller
 
 api_v1_router = APIRouter()
 
@@ -21,3 +21,5 @@ api_v1_router.include_router(stock_controller.router, prefix="/trading", tags=["
 api_v1_router.include_router(order_controller.router, prefix="/trading", tags=["주문 관리"])
 api_v1_router.include_router(portfolio_controller.router, prefix="/trading", tags=["포트폴리오 관리"])
 api_v1_router.include_router(trading_controller.router, prefix="/trading", tags=["거래 분석"])
+api_v1_router.include_router(ws_controller.router, prefix="/trading", tags=["실시간"])
+api_v1_router.include_router(toss_requester_controller.router, prefix="/trading/proxy", tags=["외부 API 프록시"])

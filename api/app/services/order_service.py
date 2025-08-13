@@ -64,7 +64,7 @@ class OrderService:
 
     def create_quick_order(self, user_id: str, stock_id: str, order_type: OrderType, amount_or_quantity: Decimal) -> Order:
         """빠른 주문을 생성합니다."""
-        # 현재가 조회 (실제로는 외부 API 호출)
+        # 현재가 조회 (실제로는 toss API 호출)
         current_price = self._get_current_price(stock_id)
         
         if order_type == OrderType.BUY:
