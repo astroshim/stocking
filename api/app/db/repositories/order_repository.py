@@ -22,6 +22,10 @@ class OrderRepository(BaseRepository):
         self.session.flush()
         return order
 
+    def get_by_id(self, order_id: str) -> Optional[Order]:
+        """ID로 주문 조회"""
+        return self.session.query(Order).filter(Order.id == order_id).first()
+
     def get_by_user_and_id(self, user_id: str, order_id: str) -> Optional[Order]:
         """사용자별 주문을 조회합니다."""
         return self.session.query(Order).filter(

@@ -49,6 +49,8 @@ class VirtualBalanceRepository(BaseRepository):
     
     def deposit_cash(self, user_id: str, amount: Decimal, description: str = None) -> VirtualBalance:
         """현금 입금"""
+        if amount is None or amount <= 0:
+            raise ValueError("입금 금액은 0보다 커야 합니다.")
         virtual_balance = self.get_by_user_id(user_id)
         if not virtual_balance:
             # 잔고가 없으면 새로 생성
@@ -74,6 +76,8 @@ class VirtualBalanceRepository(BaseRepository):
     
     def withdraw_cash(self, user_id: str, amount: Decimal, description: str = None) -> VirtualBalance:
         """현금 출금"""
+        if amount is None or amount <= 0:
+            raise ValueError("출금 금액은 0보다 커야 합니다.")
         virtual_balance = self.get_by_user_id(user_id)
         if not virtual_balance:
             raise ValueError("Virtual balance not found")

@@ -170,12 +170,7 @@ class TransactionService:
                 'reference_number': transaction.reference_number
             })
         
-        return SimplePage(
-            items=transaction_data,
-            page=page,
-            per_page=size,
-            has_next=offset + size < total_count
-        )
+        return SimplePage(items=transaction_data, page=page, per_page=size, has_next=offset + size < total_count)
 
     def get_transaction_by_id(self, user_id: str, transaction_id: str) -> Optional[Dict[str, Any]]:
         """특정 거래 내역 조회"""
@@ -205,6 +200,39 @@ class TransactionService:
             'is_simulated': transaction.is_simulated,
             'created_at': transaction.created_at.isoformat()
         }
+
+    def update_daily_statistics(self, user_id: str, as_of: Optional[datetime] = None) -> None:
+        """일별 거래 통계 생성/업데이트 (간략 구현)"""
+        if as_of is None:
+            as_of = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        period_start = as_of
+        period_end = as_of.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+        summary = self.transaction_repo.get_trading_summary(user_id=user_id, period_days=1)
+        statistics_data = {
+            'total_trades': summary['total_transactions'],
+            'buy_trades': 0,
+            'sell_trades': 0,
+            'total_buy_amount': summary['total_buy_amount'],
+            'total_sell_amount': summary['total_sell_amount'],
+            'total_commission': summary['total_commission'],
+            'total_tax': summary['total_tax'],
+            'realized_profit_loss': summary['net_amount'],
+            'win_trades': 0,
+            'loss_trades': 0,
+            'win_rate': 0,
+            'portfolio_value_start': 0,
+            'portfolio_value_end': 0,
+            'portfolio_return': 0
+        }
+
+        self.trading_stats_repo.create_or_update_statistics(
+            user_id=user_id,
+            period_type='daily',
+            period_start=period_start,
+            period_end=period_end,
+            statistics_data=statistics_data
+        )
 
     def get_trading_statistics(
         self,

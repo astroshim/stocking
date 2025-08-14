@@ -40,6 +40,10 @@ class BaseConfig(BaseSettings):
     STORAGE_DOMAIN: str = ""
     STORAGE_BUCKET_NAME: str = ""
 
+    # KIS Open Trading API (환경별 설정으로 이동)
+    KIS_APP_KEY: str = ""
+    KIS_APP_SECRET: str = ""
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

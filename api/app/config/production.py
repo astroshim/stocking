@@ -83,3 +83,7 @@ class ProductionConfig(BaseConfig):
     APPLE_REDIRECT_URI: str = os.environ.get('APPLE_REDIRECT_URI', 'https://stocking-web.vercel.app/login/apple')
 
 
+    # KIS Open Trading API
+    KIS_APP_KEY: str = 'PSn8Hv1BqnAoXrGSItikPYOzPrp1nypiznY1'
+    KIS_APP_SECRET: str = 'iR4J7O7yHS+RsVdGOLAutQyDIMWWYTG6o2DQSD2bFFpWcgCQdhbKYCYd5UfBr6UEzODcyXgUwKWwuvX+JPUsysNHjHzcHix+KlJD/FIVSWwbGvV6gdlrr0gTvXDvpdgSV0XNBStcRNCckKr2w5zMhsODIr8YuOixqBQKSRji0ihfXihn2p4='
+

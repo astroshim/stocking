@@ -31,7 +31,6 @@ class User(UUIDMixin, Base):
     platform = Column(String(255), nullable=True, default='', comment='폰 플랫폼')
     push_on = Column(Boolean, nullable=True, default=True)
 
-
     reports = relationship('Report', back_populates='reporter', foreign_keys='Report.user_id',
                            cascade='all, delete-orphan')
 

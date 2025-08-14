@@ -32,6 +32,9 @@ class PaymentService:
             업데이트된 가상 잔고 정보
         """
         with TransactionManager.transaction(self.db):
+            # 금액 검증
+            if amount is None or amount <= 0:
+                raise APIException(status_code=400, message="입금 금액은 0보다 커야 합니다.")
             # 사용자 존재 확인
             user = self.user_repository.get_by_id(user_id)
             if not user:
@@ -47,32 +50,24 @@ class PaymentService:
             return virtual_balance
 
     def withdraw_virtual_balance(self, user_id: str, amount: Decimal, description: Optional[str] = None) -> VirtualBalance:
-        """
-        가상 거래 잔고에서 출금합니다.
-
-        Args:
-            user_id: 사용자 ID
-            amount: 출금할 금액
-            description: 출금 설명
-
-        Returns:
-            업데이트된 가상 잔고 정보
-        """
+        """가상 거래 잔고에서 출금합니다."""
         with TransactionManager.transaction(self.db):
+            # 금액 검증
+            if amount is None or amount <= 0:
+                raise APIException(status_code=400, message="출금 금액은 0보다 커야 합니다.")
+
             # 사용자 존재 확인
             user = self.user_repository.get_by_id(user_id)
             if not user:
                 raise APIException(status_code=404, message="User not found")
 
             try:
-                # 가상 잔고에서 출금
                 virtual_balance = self.virtual_balance_repository.withdraw_cash(
                     user_id=user_id,
                     amount=amount,
                     description=description or "가상 거래 잔고 출금"
                 )
                 return virtual_balance
-
             except ValueError as e:
                 if "not found" in str(e):
                     raise APIException(status_code=404, message="Virtual balance not found")

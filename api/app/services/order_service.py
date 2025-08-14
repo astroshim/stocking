@@ -207,7 +207,15 @@ class OrderService:
             'pages': (total + size - 1) // size
         }
 
-    def execute_order(self, user_id: str, order_id: str, execution_price: Optional[Decimal] = None) -> Order:
+    def execute_order(
+        self,
+        user_id: str,
+        order_id: str,
+        execution_price: Optional[Decimal] = None,
+        executed_quantity: Optional[Decimal] = None,
+        commission: Optional[Decimal] = None,
+        tax: Optional[Decimal] = None,
+    ) -> Order:
         """주문을 강제로 체결합니다."""
         with TransactionManager.transaction(self.order_repository.session):
             order = self.get_order_by_id(user_id, order_id)
@@ -219,16 +227,26 @@ class OrderService:
             if execution_price is None:
                 execution_price = self._get_current_price(order.stock_id)
             
-            # 체결 수량 (남은 수량 전체)
+            # 체결 수량
             remaining_quantity = order.quantity - order.executed_quantity
+            if executed_quantity is None:
+                executed_quantity = remaining_quantity
+            else:
+                # 요청된 부분 체결 수량이 남은 수량을 초과하지 않도록 제한
+                if executed_quantity > remaining_quantity:
+                    executed_quantity = remaining_quantity
             
             # 수수료 계산
-            commission = self._calculate_commission(execution_price * remaining_quantity)
-            tax = self._calculate_tax(execution_price * remaining_quantity, order.order_type)
+            computed_commission = self._calculate_commission(execution_price * executed_quantity)
+            computed_tax = self._calculate_tax(execution_price * executed_quantity, order.order_type)
+            if commission is None:
+                commission = computed_commission
+            if tax is None:
+                tax = computed_tax
             
             # 주문 체결
             execution = self.order_repository.execute_order(
-                order, execution_price, remaining_quantity, commission, tax
+                order, execution_price, executed_quantity, commission, tax
             )
             
             # 거래 내역을 먼저 생성하여 cash_before/after를 정확히 기록
@@ -265,7 +283,8 @@ class OrderService:
 
         virtual_balance = self.virtual_balance_repository.get_by_user_id(user_id)
         if not virtual_balance or virtual_balance.available_cash < required_amount:
-            raise InsufficientBalanceError("Insufficient available cash for buy order (includes estimated fees)")
+            # 구현과 테스트 모두에서 일관되게 한글 메시지 사용 ("잔고" 키워드 포함)
+            raise InsufficientBalanceError("가용 잔고가 부족합니다 (수수료/세금 포함)")
 
         # 사용 가능한 현금에서 차감 (주문 완료/취소 시까지 예약)
         virtual_balance.available_cash -= required_amount

@@ -41,10 +41,5 @@ def paginate_without_count(
     if has_next:
         items = items[:per_page]
 
-    return SimplePage(
-        items=items,
-        page=page,
-        per_page=per_page,
-        has_next=has_next
-    )
+    return SimplePage(items=items, page=page, per_page=per_page, has_next=has_next)
 
