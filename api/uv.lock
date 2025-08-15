@@ -613,6 +613,18 @@ wheels = [
 ]
 
 [[package]]
+name = "portone-server-sdk"
+version = "0.16.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cb/d3/ac7de351050cc4710dbf2d7d5d7fc1e82e2cf261c1dea416a92e1bbff96f/portone_server_sdk-0.16.2.tar.gz", hash = "sha256:954dc7b59cb1eda1c4ef85e39134a0294448ed6dedf875d01711aee108ad4a6b", size = 344554, upload-time = "2025-08-11T09:33:13.461Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/14/fd37a9ba668b8520699da94bd847be33f7c26e1259e235239c7cfb9cdf1e/portone_server_sdk-0.16.2-py3-none-any.whl", hash = "sha256:96567fc42f3f8fd8e1cefd75121e0d29251d9c9ab0f002707b0b0d8a091a9d01", size = 853983, upload-time = "2025-08-11T09:33:12.361Z" },
+]
+
+[[package]]
 name = "proto-plus"
 version = "1.26.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1029,6 +1041,7 @@ dependencies = [
     { name = "gunicorn" },
     { name = "httpx" },
     { name = "logging" },
+    { name = "portone-server-sdk" },
     { name = "pycryptodome" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -1058,6 +1071,7 @@ requires-dist = [
     { name = "gunicorn", specifier = ">=23.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "logging", specifier = ">=0.4.9.6" },
+    { name = "portone-server-sdk", specifier = ">=0.4.0" },
     { name = "pycryptodome", specifier = ">=3.23.0" },
     { name = "pydantic", specifier = ">=2.11.3" },
     { name = "pydantic-settings", specifier = ">=2.8.1" },

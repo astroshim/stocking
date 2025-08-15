@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, status, Request
+import os
 
 from app.api.v1.schemas.payment_schema import (
     ChargeRequest, PaymentRequest, PaymentResponse, PaymentCallbackRequest,
     VirtualBalanceDepositRequest, VirtualBalanceWithdrawRequest, 
-    VirtualBalanceInitRequest, VirtualBalanceResponse
+    VirtualBalanceInitRequest, VirtualBalanceResponse,
+    PortonePrepareRequest, PortonePrepareResponse, PortoneCompleteRequest
 )
 from app.api.v1.schemas.user_schema import ResponseUser
 from app.config.di import get_payment_service
@@ -207,3 +209,61 @@ def initialize_virtual_balance(
             message="Failed to initialize virtual balance",
             detail={"error": str(e)}
         )
+
+
+# ===== PortOne V2 결제 플로우 =====
+
+@router.post("/portone/prepare", response_model=PortonePrepareResponse, summary="포트원 결제창 파라미터 발급")
+def portone_prepare(
+    body: PortonePrepareRequest,
+    current_user_id: str = Depends(get_current_user),
+    payment_service: PaymentService = Depends(get_payment_service)
+):
+    try:
+        data = payment_service.prepare_portone_payment(
+            user_id=current_user_id,
+            amount=body.amount,
+            order_name=body.order_name,
+            currency=body.currency,
+        )
+        return create_response(
+            data=PortonePrepareResponse(**data).model_dump(),
+            message="결제창 파라미터 발급 성공"
+        )
+    except APIException as e:
+        raise e
+    except Exception as e:
+        raise APIException(status_code=500, message="결제 준비 실패", detail={"error": str(e)})
+
+
+@router.post("/portone/complete", summary="포트원 결제 완료 동기화")
+def portone_complete(
+    body: PortoneCompleteRequest,
+    payment_service: PaymentService = Depends(get_payment_service)
+):
+    try:
+        result = payment_service.complete_portone_payment(payment_id=body.payment_id)
+        return create_response(data=result, message="결제 동기화 완료")
+    except APIException as e:
+        raise e
+    except Exception as e:
+        raise APIException(status_code=500, message="결제 동기화 실패", detail={"error": str(e)})
+
+
+@router.post("/portone/webhook", summary="포트원 결제 웹훅 수신")
+async def portone_webhook(request: Request):
+    try:
+        import portone_server_sdk as portone
+        raw = await request.body()
+        from app.config import config as app_config
+        webhook = portone.webhook.verify(
+            os.environ.get("PORTONE_WEBHOOK_SECRET") or app_config.PORTONE_WEBHOOK_SECRET,
+            raw.decode("utf-8"),
+            request.headers,
+        )
+        data = getattr(webhook, 'data', None)
+        payment_id = getattr(data, 'payment_id', None) or getattr(data, 'paymentId', None)
+        return create_response(data={"ok": True, "payment_id": payment_id}, message="웹훅 수신")
+    except Exception as e:
+        # SDK는 검증 실패시 전용 예외를 던짐. 메시지 단순화
+        raise APIException(status_code=400, message="웹훅 처리 실패", detail={"error": str(e)})

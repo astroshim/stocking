@@ -83,7 +83,7 @@ async def create_quick_order(
         raise HTTPException(status_code=500, detail=f"빠른 주문 처리 실패: {str(e)}")
 
 
-@router.get("/orders", response_model=OrderListResponse, summary="주문 목록 조회")
+@router.get("/orders", response_model=OrderListResponse, summary="주문 목록 조회") 
 async def get_orders(
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(20, ge=1, le=100, description="페이지 크기"),
@@ -93,7 +93,17 @@ async def get_orders(
     current_user_id: str = Depends(get_current_user),
     order_service: OrderService = Depends(get_order_service)
 ):
-    """사용자의 주문 목록을 조회합니다."""
+    """
+    * 사용자의 주문 목록을 조회합니다.
+
+    * 주문 상태:
+      - PENDING : 대기중
+      - PARTIALLY_FILLED : 부분체결
+      - FILLED : 체결완료
+      - CANCELLED : 취소됨
+      - REJECTED : 거부됨
+      - EXPIRED : 만료됨
+    """
     try:
         result = order_service.get_orders(current_user_id, page, size, status, order_type, stock_id)
         

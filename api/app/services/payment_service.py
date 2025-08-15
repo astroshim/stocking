@@ -1,6 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, Dict, Any, Union
+import os
+import json
 
 from sqlalchemy.orm import Session
 
@@ -18,6 +20,12 @@ class PaymentService:
         self.db = db
         self.user_repository = UserRepository(db)
         self.virtual_balance_repository = VirtualBalanceRepository(db)
+        # PortOne V2 설정
+        from app.config import config
+        self._store_id = config.PORTONE_STORE_ID
+        # 기본 채널키는 프론트에서 선택 가능하나, 서버 저장/주입도 가능
+        self._channel_key = os.environ.get('PORTONE_CHANNEL_KEY', 'channel-key')
+        self._v2_api_secret = config.PORTONE_V2_API_SECRET
 
     def deposit_virtual_balance(self, user_id: str, amount: Decimal, description: Optional[str] = None) -> VirtualBalance:
         """
@@ -185,3 +193,46 @@ class PaymentService:
                 result["message"] = "Insufficient information provided"
 
             return result
+
+    # ===== PortOne V2 연동 유틸 =====
+    def prepare_portone_payment(self, user_id: str, amount: Decimal, order_name: str, currency: str = "KRW") -> Dict[str, Any]:
+        if amount is None or amount <= 0:
+            raise APIException(status_code=400, message="결제 금액은 0보다 커야 합니다.")
+        # paymentId는 클라이언트에서 채번해도 되지만, 서버에서 생성해서 내려주면 멱등성/검증이 용이
+        from uuid import uuid4
+        payment_id = uuid4().hex
+        return {
+            "store_id": self._store_id,
+            "channel_key": self._channel_key,
+            "payment_id": payment_id,
+            "order_name": order_name,
+            "amount": amount,
+            "currency": currency,
+        }
+
+    def complete_portone_payment(self, payment_id: str) -> Dict[str, Any]:
+        try:
+            import portone_server_sdk as portone
+            client = portone.PaymentClient(secret=self._v2_api_secret)
+            p = client.get_payment(payment_id=payment_id)
+        except Exception as e:
+            raise APIException(status_code=400, message=f"결제 조회 실패: {str(e)}")
+
+        # 승인 상태만 통과
+        import portone_server_sdk as portone
+        if not isinstance(p, portone.payment.PaidPayment):
+            raise APIException(status_code=400, message="결제가 승인되지 않았습니다.")
+
+        # 비즈니스 검증 (custom_data 등)
+        try:
+            custom = json.loads(p.custom_data) if getattr(p, 'custom_data', None) else {}
+        except Exception:
+            custom = {}
+
+        # TODO: 주문 조회/금액 일치 검증 로직 연결 가능
+        return {
+            "status": "PAID",
+            "payment_id": payment_id,
+            "amount": float(p.amount.total),
+            "currency": p.currency,
+        }

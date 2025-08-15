@@ -88,3 +88,24 @@ class PaymentCallbackRequest(BaseModel):
     payment_method: Optional[str] = Field(None, description="결제 방법")
     payment_time: Optional[str] = Field(None, description="결제 시간")
     extra_data: Optional[dict] = Field(None, description="추가 데이터")
+
+
+# === PortOne V2 결제창/완료/웹훅 DTO ===
+
+class PortonePrepareRequest(BaseModel):
+    amount: Decimal = Field(..., gt=0, description="결제 금액")
+    order_name: str = Field(..., min_length=1, description="주문명")
+    currency: str = Field(default="KRW", description="통화(KRW 등)")
+
+
+class PortonePrepareResponse(BaseModel):
+    store_id: str
+    channel_key: str
+    payment_id: str
+    order_name: str
+    amount: Decimal
+    currency: str
+
+
+class PortoneCompleteRequest(BaseModel):
+    payment_id: str = Field(..., description="결제 ID")

@@ -282,6 +282,72 @@ app/
 └── exceptions/         # 커스텀 예외
 ```
 
+## 포트원 사용방법
+
+### 사용 방법
+  - 결제창 호출 전 서버에서 파라미터 발급:
+    - 요청: POST /api/v1/payments/portone/prepare
+    ```
+    Body: {"amount": 10000, "order_name": "프리미엄 구독", "currency": "KRW"}
+    ``` 
+
+    - 응답: 
+    ```
+    store_id, channel_key, payment_id, order_name, amount, currency
+    ```
+
+  - 프론트에서 PortOne.requestPayment(...) 호출 시 위 값을 사용
+
+  - 결제 후(승인되면) 프론트에서 완료 동기화:
+    - 요청: 
+    ```
+    POST /api/v1/payments/portone/complete with {"payment_id":"..."}
+    ```
+
+  - 웹훅: 콘솔에 `/api/v1/payments/portone/webhook` 등록
+    - 서버는 PORTONE_WEBHOOK_SECRET 환경변수 또는 설정에서 검증
+
+### 환경 변수/설정
+PORTONE_STORE_ID, PORTONE_V2_API_SECRET, PORTONE_WEBHOOK_SECRET는 이미 development.py/production.py에 정의. PORTONE_CHANNEL_KEY는 환경변수로 주입 가능(없으면 'channel-key' 기본값).
+
+
+### 요약
+1. 결제창 팝업 요청 → /portone/prepare로 파라미터 발급.
+2. 프론트에서 프론트sdk 에서 제공되는 PortOne.requestPayment(...) 로 결제 팝업창 실행.
+```js
+import PortOne from "@portone/browser-sdk/v2";
+
+async function onPayClick() {
+  const res = await fetch("/api/v1/payments/portone/prepare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ amount: 10000, order_name: "프리미엄 구독", currency: "KRW" }),
+  });
+  const { data } = await res.json();
+
+  const payment = await PortOne.requestPayment({
+    storeId: data.store_id,
+    channelKey: data.channel_key,
+    paymentId: data.payment_id,
+    orderName: data.order_name,
+    totalAmount: Number(data.amount),
+    currency: data.currency,
+    customData: { userId: "..." },
+  });
+
+  if (!payment.code) {
+    await fetch("/api/v1/payments/portone/complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ payment_id: payment.paymentId }),
+    });
+  }
+}
+```
+2. 결제창 입력/요청 후 → /portone/complete로 승인 동기화.
+3. 실제 결제 완료 웹훅 → /portone/webhook에서 검증/수신.
+
+
 ## 🔧 개발 도구
 
 - **Alembic**: 데이터베이스 마이그레이션
