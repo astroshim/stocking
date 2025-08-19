@@ -28,8 +28,8 @@ class ProductionConfig(BaseConfig):
     JWT_SECRET_KEY: str = '3a9b2c1d7e8f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d'
 
     # 스토리지 설정
-    STORAGE_DOMAIN: str = Field(os.environ.get('STORAGE_DOMAIN') or 'https://stocking.kr')
-    STORAGE_BUCKET_NAME: str = Field(os.environ.get('STORAGE_BUCKET_NAME') or 'stocking')
+    STORAGE_DOMAIN: str = Field(os.environ.get('STORAGE_DOMAIN') or 'https://kayty.kr')
+    STORAGE_BUCKET_NAME: str = Field(os.environ.get('STORAGE_BUCKET_NAME') or 'kayty')
 
     # # 추가 프로덕션 환경 설정
     # DEBUG: bool = False
@@ -56,7 +56,7 @@ class ProductionConfig(BaseConfig):
         }
     }
 
-    DATABASE_URI: str = 'mysql+pymysql://stocking:aWdj83Kp9dbwlsdktkfkdgodkQkrk6B4N!@dev-mysql-db.ctqke428aiun.ap-northeast-2.rds.amazonaws.com/stocking'
+    DATABASE_URI: str = 'mysql+pymysql://keauty:aWdj83Kp9dbwlsdktkfkdgodkQkrk6B4N!@dev-mysql-db.ctqke428aiun.ap-northeast-2.rds.amazonaws.com/keauty'
 
     # 결제 연동 (portone)
     PORTONE_STORE_ID: str = os.environ.get('PORTONE_STORE_ID', 'store-3909c008-6422-4743-a504-dbd27acd8bf6')

@@ -161,6 +161,11 @@ PYTHON_ENV=development DATABASE_URI='sqlite:///:memory:' JWT_SECRET_KEY='dev' uv
 ### 빠른 시작
 
 ```bash
+
+# ssh 터널후, db migration
+DATABASE_URI=mysql\+pymysql:\/\/keauty:aWdj83Kp9dbwlsdktkfkdgodkQkrk6B4N\!\@127.0.0.1/keauty uv run create_tables.py
+
+
 # 테이블 생성
 python create_tables.py
 

@@ -5,16 +5,16 @@
 set -e
 
 # --- 설정 ---
-CLUSTER_NAME="stockingApiEc2Cluster"
-SERVICE_NAME="stockingApiEc2Service"
-TASK_FAMILY="stocking-api"
-CONTAINER_NAME="stocking-api-container"
-AWS_PROFILE="stocking-profile"
+CLUSTER_NAME="KeautyApiEc2Cluster"
+SERVICE_NAME="KeautyApiEc2Service"
+TASK_FAMILY="keauty-api"
+CONTAINER_NAME="keauty-api-container"
+AWS_PROFILE="keauty-profile"
 AWS_REGION="ap-northeast-2"
 AWS_ACCOUNT_ID="775405889390"
-ECR_REPOSITORY="stocking/stocking-api"
+ECR_REPOSITORY="keauty/keauty-api"
 
-ASG_NAME="stocking-ecs-ec2-cloudfront-api-stack-EC2AutoScalingGroup-5qCr7nkQpZPA"
+ASG_NAME="keauty-ecs-ec2-cloudfront-api-stack-EC2AutoScalingGroup-5qCr7nkQpZPA"
 DESIRED_CAPACITY=2
 
 # 1. 사용자로부터 새 이미지 버전 입력받기
@@ -28,7 +28,7 @@ echo "배포를 위해서 인스턴스 용량을 증가합니다."
 aws autoscaling update-auto-scaling-group \
   --auto-scaling-group-name $ASG_NAME \
   --desired-capacity $DESIRED_CAPACITY \
-  --profile stocking-profile
+  --profile keauty-profile
 
 echo "✅ Auto Scaling Group 용량을 $DESIRED_CAPACITY 로 설정했습니다."
 
@@ -38,7 +38,7 @@ while true; do
     # 현재 InService 상태인 인스턴스 수 확인
     IN_SERVICE_COUNT=$(aws autoscaling describe-auto-scaling-groups \
         --auto-scaling-group-names $ASG_NAME \
-        --profile stocking-profile \
+        --profile keauty-profile \
         --query 'AutoScalingGroups[0].Instances[?LifecycleState==`InService`]' \
         --output json | jq '. | length')
     
@@ -57,7 +57,7 @@ done
 echo "🔄 ECS 컨테이너 인스턴스 상태를 확인합니다..."
 CONTAINER_INSTANCES=$(aws ecs list-container-instances \
     --cluster $CLUSTER_NAME \
-    --profile stocking-profile \
+    --profile keauty-profile \
     --query 'containerInstanceArns' \
     --output json | jq '. | length')
 
@@ -69,7 +69,7 @@ if [ "$CONTAINER_INSTANCES" -lt "$DESIRED_CAPACITY" ]; then
         sleep 15
         CONTAINER_INSTANCES=$(aws ecs list-container-instances \
             --cluster $CLUSTER_NAME \
-            --profile stocking-profile \
+            --profile keauty-profile \
             --query 'containerInstanceArns' \
             --output json | jq '. | length')
         echo "현재 등록된 컨테이너 인스턴스: $CONTAINER_INSTANCES/$DESIRED_CAPACITY"

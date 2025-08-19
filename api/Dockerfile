@@ -20,9 +20,15 @@ FROM python:3.11-slim
 ARG ENV="production"
 ARG LOG_LEVEL="info"
 
+ARG AWS_ACCESS_KEY_ID
+ARG AWS_SECRET_ACCESS_KEY
+
 # 빌드 인자를 환경 변수로 설정
 ENV ENV=$ENV
 ENV LOG_LEVEL=$LOG_LEVEL
+ENV AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+ENV AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+ENV PYTHON_ENV=$ENV
 
 # 시스템 패키지 최신화 및 정리
 RUN apt-get update && \
@@ -41,10 +47,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 COPY --from=builder /app/.venv /app/.venv
 
 # 소스 코드만 선별적으로 복사
+COPY main.py ./
 COPY app/ ./app/
 COPY gunicorn.conf.py ./
 COPY pyproject.toml uv.lock ./
-COPY .env.${ENV} .env
+# COPY .env.${ENV} .env
 # .env.production은 런타임에 외부에서 주입 (보안상 권장)
 
 # 컨테이너에서 사용할 포트를 명시적으로 지정

@@ -2,10 +2,10 @@ version = 0.1
 [default]
 [default.deploy]
 [default.deploy.parameters]
-stack_name = "keauty-ecs-ec2-cloudfront-api-stack"
+stack_name = "stocking-ecs-ec2-cloudfront-api-stack"
 s3_bucket = "aws-sam-cli-keauty"
 s3_prefix = "keauty-ecs-ec2-cloudfront-api-stack"
 region = "ap-northeast-2"
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "ImageUrl=\"775405889390.dkr.ecr.ap-northeast-2.amazonaws.com/keauty/keauty-api:latest\" ContainerPort=\"5100\" DomainName=\"api.keauty.com\" AcmCertificateArn=\"\""
+parameter_overrides = "ImageUrl=\"775405889390.dkr.ecr.ap-northeast-2.amazonaws.com/keauty/keauty-api:latest\" ContainerPort=\"5100\" DomainName=\"api2.keauty.com\" AcmCertificateArn=\"\""
 image_repositories = [] 

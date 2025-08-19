@@ -12,7 +12,8 @@ from app.services.service_factory import (
     order_service_factory,
     transaction_service_factory
 )
-
+from app.db.repositories.routine_marketing_repository import RoutineMarketingRepository
+from app.services.routine_marketing_service import RoutineMarketingService
 
 def get_user_service(db: Session = Depends(get_db)):
     """UserService dependency"""
@@ -58,3 +59,8 @@ def get_order_service(db: Session = Depends(get_db)):
 def get_transaction_service(db: Session = Depends(get_db)):
     """TransactionService dependency"""
     return transaction_service_factory(db) 
+
+def get_routine_marketing_service(db: Session = Depends(get_db)):
+    """RoutineMarketingService dependency"""
+    repository = RoutineMarketingRepository(db)
+    return RoutineMarketingService(repository) 

@@ -17,7 +17,7 @@ class S3Service:
         self.storage_domain = stocking_config.STORAGE_DOMAIN
 
         if environment == 'local':
-            self.session = boto3.session.Session(profile_name='stocking-profile')
+            self.session = boto3.session.Session(profile_name='keauty-profile')
             self.s3_client = self.session.client('s3', config=Config(region_name=self.region_name))
         else:
             self.s3_client = boto3.client('s3',

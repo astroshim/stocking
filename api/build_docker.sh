@@ -2,9 +2,9 @@
 set -e
 
 AWS_REGION=ap-northeast-2
-AWS_PROFILE=stocking-profile
+AWS_PROFILE=keauty-profile
 AWS_ACCOUNT=775405889390
-REPO_NAME='stocking/stocking-api'
+REPO_NAME='keauty/keauty-api'
 ECR_REPO="$AWS_ACCOUNT.dkr.ecr.ap-northeast-2.amazonaws.com/${REPO_NAME}"
 
 

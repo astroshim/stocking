@@ -1,0 +1,155 @@
+syntax = "proto3";
+
+package com.dunamu.crix.front.protobuf;
+
+// Enum 정의
+enum StreamType {
+  SNAPSHOT = 0;
+  REALTIME = 1;
+}
+
+enum AskBid {
+  ASKUNKNOWN = 0;
+  ASK = 1;
+  BID = 2;
+}
+
+enum Change {
+  CHANGEUNKNOWN = 0;
+  RISE = 2;
+  EVEN = 3;
+  FALL = 5;
+}
+
+enum CrixOrderState {
+    WAIT = 0;
+    CANCEL = 1;
+    DONE = 2;
+    TRADE = 3;
+    WATCH = 4;
+    PREVENTED = 5;
+}
+
+enum MarketEventType {
+    MARKET_WARNING = 0;
+    TRADING_SUSPENDED = 1;
+    PRICE_FLUCTUATIONS = 2;
+    TRADING_VOLUME_SOARING = 3;
+    DEPOSIT_AMOUNT_SOARING = 4;
+    GLOBAL_PRICE_DIFFERENCES = 5;
+    CONCENTRATION_OF_SMALL_ACCOUNTS = 6;
+    TRADE_FEE_STATE = 7;
+    MEME = 8;
+}
+
+
+// 공통 메시지
+message FrontModelInfo {
+  string code = 1;
+  StreamType streamType = 2;
+  int64 timestamp = 3;
+}
+
+message PrivateFrontModelInfo {
+    FrontModelInfo frontModelInfo = 1;
+    repeated string accessKeys = 2;
+}
+
+
+// 주요 데이터 메시지
+message CrixTrade {
+  FrontModelInfo frontModelInfo = 1;
+  uint32 tradeDate = 2;
+  uint32 tradeTime = 3;
+  uint64 tradeTimestamp = 4;
+  double tradePrice = 5;
+  double tradeVolume = 6;
+  AskBid askBid = 7;
+  double prevClosingPrice = 8;
+  Change change = 9;
+  double changePrice = 10;
+  uint64 sequentialId = 11;
+}
+
+message CrixOrderbookUnit {
+  double askPrice = 1;
+  double bidPrice = 2;
+  double askSize = 3;
+  double bidSize = 4;
+}
+
+message CrixOrderbook {
+  FrontModelInfo frontModelInfo = 1;
+  double totalAskSize = 2;
+  double totalBidSize = 3;
+  repeated CrixOrderbookUnit orderbookUnits = 4;
+  double totalAskPrice = 5;
+  double totalBidPrice = 6;
+  double level = 7;
+}
+
+message CrixOrder {
+    PrivateFrontModelInfo frontModelInfo = 1;
+    AskBid askBid = 2;
+    double price = 3;
+    double volume = 4;
+    string uuid = 5;
+    string orderType = 6;
+    CrixOrderState state = 7;
+    uint64 orderTimestamp = 8;
+    string tradeUuid = 9;
+    uint64 tradeTimestamp = 10;
+}
+
+message BaseCandle {
+  FrontModelInfo frontModelInfo = 1;
+  uint64 candleTimestamp = 2;
+  uint64 lastSequentialId = 3;
+  double openingPrice = 4;
+  double highPrice = 5;
+  double lowPrice = 6;
+  double tradePrice = 7;
+  double tradeVolume = 8;
+  double accTradePrice = 9;
+}
+
+message MarketEventDetail {
+    string name = 1;
+    string value = 2;
+}
+
+message RecentMarketEvent {
+    MarketEventType eventType = 1;
+    string message = 2;
+    string link = 3;
+    string triggerTimeUtc = 4;
+    string expirationTimeUtc = 5;
+    string triggerTimeKst = 6;
+    string expirationTimeKst = 7;
+    repeated MarketEventDetail details = 8;
+    uint64 timestamp = 9;
+    uint32 warningLevel = 10;
+}
+
+// 최근 시세 정보 메시지 (추가)
+message RecentCrix {
+  FrontModelInfo frontModelInfo = 1;
+  double tradePrice = 2;
+  double change = 3;
+  double changeRate = 4;
+  double accTradePrice24h = 5;
+  double accTradeVolume24h = 6;
+  double highPrice = 7;
+  double lowPrice = 8;
+  double openingPrice = 9;
+  uint64 timestamp = 10;
+  double tradeVolume = 11;
+  double signedChangePrice = 12;
+  double signedChangeRate = 13;
+  Change changeEnum = 14;
+}
+
+message CrixEvent {
+    FrontModelInfo frontModelInfo = 1;
+    repeated RecentMarketEvent marketEvents = 2;
+}

@@ -25,8 +25,8 @@ class DevelopmentConfig(BaseConfig):
     JWT_SECRET_KEY: str = '8f4e91c6b0a52d7e5df3c8e7a9f6b02c1d380f5c2a63e94d70b8c7e9f5a2d1e0c3b6a9d2e5f8c1b4a7d0e3f6c9b2a5d8e1f4c7b0a3d6e9f2c5b8a1d4e7f0c3b6'
 
     # 스토리지 설정
-    STORAGE_DOMAIN: str = Field(os.environ.get('STORAGE_DOMAIN') or 'https://stocking.kr')
-    STORAGE_BUCKET_NAME: str = Field(os.environ.get('STORAGE_BUCKET_NAME') or 'stocking')
+    STORAGE_DOMAIN: str = Field(os.environ.get('STORAGE_DOMAIN') or 'https://kayty.kr')
+    STORAGE_BUCKET_NAME: str = Field(os.environ.get('STORAGE_BUCKET_NAME') or 'kayty')
 
     AWS_ACCESS_KEY_ID: str = os.environ.get('AWS_ACCESS_KEY_ID', 'AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY: str = os.environ.get('AWS_SECRET_ACCESS_KEY', 'AWS_SECRET_ACCESS_KEY')

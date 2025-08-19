@@ -7,7 +7,7 @@ if [ -z "$IMAGE_VERSION" ]; then
   exit 1
 fi
 
-read -p "Enter the domain name (e.g., api.keauty.com): " DOMAIN_NAME
+read -p "Enter the domain name (e.g., api2.keauty.com): " DOMAIN_NAME
 if [ -z "$DOMAIN_NAME" ]; then
   echo "Domain name is required."
   exit 1
@@ -40,7 +40,7 @@ echo "Deploying CloudFront + ECS EC2 stack..."
 
 sam deploy --profile $AWS_PROFILE \
   --template-file template.yaml \
-  --stack-name keauty-ecs-ec2-cloudfront-api-stack \
+  --stack-name stocking-ecs-ec2-cloudfront-api-stack \
   --parameter-overrides $PARAM_OVERRIDES \
   --capabilities CAPABILITY_IAM
 
