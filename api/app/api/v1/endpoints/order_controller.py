@@ -304,31 +304,31 @@ async def cancel_order(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"주문 취소 실패: {str(e)}")
 
-@router.post("/orders/{order_id}/execute", summary="주문 강제 체결")
-async def execute_order(
-    order_id: str,
-    execution_price: Optional[float] = Query(None, description="체결가 (시장가일 경우)"),
-    current_user_id: str = Depends(get_current_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """
-    주문을 강제로 체결합니다. (관리자 전용 또는 시뮬레이션용)
-    """
-    try:
-        price = Decimal(str(execution_price)) if execution_price else None
-        executed_order = order_service.execute_order(current_user_id, order_id, price)
-        order_response = OrderResponse.model_validate(executed_order)
+# @router.post("/orders/{order_id}/execute", summary="주문 강제 체결")
+# async def execute_order(
+#     order_id: str,
+#     execution_price: Optional[float] = Query(None, description="체결가 (시장가일 경우)"),
+#     current_user_id: str = Depends(get_current_user),
+#     order_service: OrderService = Depends(get_order_service)
+# ):
+#     """
+#     주문을 강제로 체결합니다. (관리자 전용 또는 시뮬레이션용)
+#     """
+#     try:
+#         price = Decimal(str(execution_price)) if execution_price else None
+#         executed_order = order_service.execute_order(current_user_id, order_id, price)
+#         order_response = OrderResponse.model_validate(executed_order)
         
-        return create_response(
-            data=order_response.model_dump(),
-            message="주문이 성공적으로 체결되었습니다."
-        )
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"주문 체결 실패: {str(e)}")
+#         return create_response(
+#             data=order_response.model_dump(),
+#             message="주문이 성공적으로 체결되었습니다."
+#         )
+#     except NotFoundError as e:
+#         raise HTTPException(status_code=404, detail=str(e))
+#     except ValidationError as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"주문 체결 실패: {str(e)}")
 
 
 @router.post("/orders/{order_id}", summary="주문 체결 (주문가로 체결)")

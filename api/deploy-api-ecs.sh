@@ -25,11 +25,18 @@ if [ -z "$IMAGE_VERSION" ]; then
 fi
 
 echo "배포를 위해서 인스턴스 용량을 증가합니다."
+echo "현재 ASG 상태 확인..."
+aws autoscaling describe-auto-scaling-groups \
+  --auto-scaling-group-names $ASG_NAME \
+  --profile $AWS_PROFILE \
+  --region $AWS_REGION \
+  --query 'AutoScalingGroups[0].{Current: DesiredCapacity, Min: MinSize, Max: MaxSize}'
+
 aws autoscaling update-auto-scaling-group \
   --auto-scaling-group-name $ASG_NAME \
   --desired-capacity $DESIRED_CAPACITY \
-  --profile keauty-profile
-
+  --region $AWS_REGION \
+  --profile $AWS_PROFILE
 echo "✅ Auto Scaling Group 용량을 $DESIRED_CAPACITY 로 설정했습니다."
 
 # 인스턴스가 준비될 때까지 대기
