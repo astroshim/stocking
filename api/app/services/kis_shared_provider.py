@@ -11,6 +11,52 @@ from dataclasses import dataclass
 import time
 
 
+# 해외주식체결처리 출력라이브러리
+def stockspurchase_overseas(data_cnt, data):
+    print("============================================")
+    menulist = "실시간종목코드|종목코드|수수점자리수|현지영업일자|현지일자|현지시간|한국일자|한국시간|시가|고가|저가|현재가|대비구분|전일대비|등락율|매수호가|매도호가|매수잔량|매도잔량|체결량|거래량|거래대금|매도체결량|매수체결량|체결강도|시장구분"
+    menustr = menulist.split('|')
+    pValue = data.split('^')
+    i = 0
+    for cnt in range(data_cnt):  # 넘겨받은 체결데이터 개수만큼 print 한다
+        print("### [%d / %d]" % (cnt + 1, data_cnt))
+        for menu in menustr:
+            print("%-13s[%s]" % (menu, pValue[i]))
+            i += 1
+
+
+# 주식체결처리 출력라이브러리
+def stockspurchase(data_cnt, data):
+    print("============================================")
+    menulist = "유가증권단축종목코드|주식체결시간|주식현재가|전일대비부호|전일대비|전일대비율|가중평균주식가격|주식시가|주식최고가|주식최저가|매도호가1|매수호가1|체결거래량|누적거래량|누적거래대금|매도체결건수|매수체결건수|순매수체결건수|체결강도|총매도수량|총매수수량|체결구분|매수비율|전일거래량대비등락율|시가시간|시가대비구분|시가대비|최고가시간|고가대비구분|고가대비|최저가시간|저가대비구분|저가대비|영업일자|신장운영구분코드|거래정지여부|매도호가잔량|매수호가잔량|총매도호가잔량|총매수호가잔량|거래량회전율|전일동시간누적거래량|전일동시간누적거래량비율|시간구분코드|임의종료구분코드|정적VI발동기준가"
+    menustr = menulist.split('|')
+    pValue = data.split('^')
+    i = 0
+    for cnt in range(data_cnt):     # 넘겨받은 체결데이터 개수만큼 print 한다
+        print("### [%d / %d]"%(cnt+1, data_cnt))
+        for menu in menustr:
+            print("%-13s[%s]" % (menu, pValue[i]))
+            i += 1
+
+
+def process_stock_data_by_tr_id(tr_id: str, data: str, source: str = ""):
+    """TR_ID에 따른 주식 데이터 출력 처리 (중복 제거용 공통 함수)"""
+    if not data or '^' not in data:
+        return
+        
+    print(f"🎯 {source} TR_ID {tr_id}에 따른 데이터 출력 처리")
+    
+    # tr_id에 따른 조건부 처리
+    if tr_id == "HDFSCNT0":
+        print(f"🌍 해외주식 체결데이터 출력 - TR_ID: {tr_id}")
+        stockspurchase_overseas(1, data)
+    elif tr_id == "H0STCNT0":
+        print(f"🇰🇷 국내주식 체결데이터 출력 - TR_ID: {tr_id}")
+        stockspurchase(1, data)
+    else:
+        print(f"⚠️ 알 수 없는 TR_ID: {tr_id}")
+
+
 @dataclass
 class Subscription:
     """구독 정보"""
@@ -287,8 +333,20 @@ class SharedKisWebSocketProvider:
             if stock_id and stock_id in self._subscriptions:
                 print(f"📈 실시간 데이터 전달 시작 - Stock: {stock_id}, 구독자: {len(self._subscriptions[stock_id].subscribers)}")
                 
-                # 구독자들에게 데이터 전달 - 즉시 끊어진 연결 제거
+                # tr_id에 따른 데이터 출력 처리
                 subscription = self._subscriptions[stock_id]
+                current_tr_id = subscription.tr_id
+                
+                # body에서 실시간 데이터 추출 시도
+                body_data = data.get("body", {})
+                if isinstance(body_data, dict):
+                    # 실시간 데이터가 문자열 형태로 들어있는 경우
+                    realtime_data = body_data.get("rt_cd") or body_data.get("data") or str(body_data)
+                    if isinstance(realtime_data, str):
+                        # 공통 함수 사용으로 중복 제거
+                        process_stock_data_by_tr_id(current_tr_id, realtime_data, "JSON")
+                
+                # 구독자들에게 데이터 전달 - 즉시 끊어진 연결 제거
                 clients_to_remove = []
                 
                 for client_id in list(subscription.subscribers):  # 복사본 사용
@@ -348,6 +406,10 @@ class SharedKisWebSocketProvider:
                         print(f"📈 실시간 데이터 매칭 - Stock: {stock_id}")
                         
                         subscription = self._subscriptions[stock_id]
+                        current_tr_id = subscription.tr_id
+                        
+                        # 공통 함수 사용으로 중복 제거
+                        process_stock_data_by_tr_id(current_tr_id, message, "실시간")
                         
                         # 실시간으로 연결 끊어진 클라이언트 감지 및 제거
                         clients_to_remove = []

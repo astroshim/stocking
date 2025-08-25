@@ -4,7 +4,9 @@ import websockets
 
 
 async def main(host: str, port: int, path: str, stock_id: str, count: int, user_id: str):
-    uri = f"ws://{host}:{port}{path}?stock_id={stock_id}&user_id={user_id}"
+    # uri = f"ws://{host}:{port}{path}?stock_id={stock_id}&user_id={user_id}"
+    uri = f"wss://{host}{path}?stock_id={stock_id}&user_id={user_id}"
+    print(f"Connecting to: {uri}")
     async with websockets.connect(uri) as websocket:
         print(f"Connected to: {uri}")
         received = 0
