@@ -11,6 +11,7 @@ from app.config import config
 from app.db.models.user import User
 from app.db.repositories.user_repository import UserRepository
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
+from app.db.repositories.watchlist_repository import WatchListRepository
 from app.utils.transaction_manager import TransactionManager
 
 
@@ -18,6 +19,7 @@ class UserService:
     def __init__(self, repository: UserRepository):
         self.repository = repository
         self.virtual_balance_repository = VirtualBalanceRepository(repository.session)
+        self.watchlist_repository = WatchListRepository(repository.session)
         self.optional_params = [
             'user_id',
             'start_date',
@@ -57,6 +59,14 @@ class UserService:
             except Exception as e:
                 logging.error(f"Failed to create virtual balance for user {user.id}: {e}")
                 # 가상잔고 생성 실패는 사용자 생성을 막지 않음 (선택적)
+            
+            # 사용자 생성 후 기본 관심종목 디렉토리도 함께 생성
+            try:
+                self.watchlist_repository.ensure_default_directory(user.id)
+                logging.info(f"Default watchlist directory created for user {user.id}")
+            except Exception as e:
+                logging.error(f"Failed to create default watchlist directory for user {user.id}: {e}")
+                # 기본 디렉토리 생성 실패는 사용자 생성을 막지 않음 (선택적)
                 
             return user
 
@@ -138,6 +148,14 @@ class UserService:
             except Exception as e:
                 logging.error(f"Failed to create virtual balance for social user {user.id}: {e}")
                 # 가상잔고 생성 실패는 사용자 생성을 막지 않음
+            
+            # 소셜 로그인 사용자도 기본 관심종목 디렉토리 생성
+            try:
+                self.watchlist_repository.ensure_default_directory(user.id)
+                logging.info(f"Default watchlist directory created for social user {user.id}")
+            except Exception as e:
+                logging.error(f"Failed to create default watchlist directory for social user {user.id}: {e}")
+                # 기본 디렉토리 생성 실패는 사용자 생성을 막지 않음
                 
             return user
 

@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import user_controller, report_controller, \
     storage_controller, auth_controller, comment_controller, role_controller, payment_controller, \
-    notice_controller, stock_controller, order_controller, portfolio_controller, trading_controller, ws_controller, toss_requester_controller, routine_marketing_controller
+    notice_controller, stock_controller, order_controller, portfolio_controller, trading_controller, ws_controller, toss_requester_controller, routine_marketing_controller, watchlist_controller
 
 api_v1_router = APIRouter()
 
@@ -16,6 +16,9 @@ api_v1_router.include_router(portfolio_controller.router, prefix="/trading", tag
 api_v1_router.include_router(trading_controller.router, prefix="/trading", tags=["거래 분석"])
 api_v1_router.include_router(ws_controller.router, prefix="/trading", tags=["실시간"])
 
+# 관심종목 관리 (독립 라우터)
+api_v1_router.include_router(watchlist_controller.router, prefix="/watchlist", tags=["관심종목 관리"])
+
 api_v1_router.include_router(toss_requester_controller.router, prefix="/proxy", tags=["toss 프록시"])
 
 # api_v1_router.include_router(report_controller.router, prefix="/reports", tags=["신고 관리"])
@@ -24,4 +27,4 @@ api_v1_router.include_router(toss_requester_controller.router, prefix="/proxy", 
 api_v1_router.include_router(payment_controller.router, prefix="/payments", tags=["결제 관리"])
 # api_v1_router.include_router(notice_controller.router, prefix="/notices", tags=["공지사항 관리"])
 api_v1_router.include_router(storage_controller.router, prefix="/storages", tags=["스토리지 관리"])
-api_v1_router.include_router(routine_marketing_controller.router, prefix="/routine-marketing", tags=["루틴 마케팅 관리"])
+# api_v1_router.include_router(routine_marketing_controller.router, prefix="/routine-marketing", tags=["루틴 마케팅 관리"])

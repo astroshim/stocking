@@ -8,7 +8,7 @@ from app.db.repositories.watchlist_repository import WatchListRepository
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
 from app.db.models.portfolio import Portfolio
 from app.db.models.virtual_balance import VirtualBalanceHistory
-from app.db.models.transaction import WatchList
+from app.db.models.watchlist import WatchList, WatchlistDirectory
 from app.utils.simple_paging import SimplePage
 
 
@@ -176,15 +176,22 @@ class PortfolioService:
         self,
         user_id: str,
         stock_id: str,
+        directory_id: Optional[str] = None,
         category: str = "기본",
         memo: Optional[str] = None,
         target_price: Optional[float] = None
     ) -> WatchList:
         """관심 종목 추가"""
         try:
+            # 디렉토리가 지정되지 않은 경우 기본 디렉토리 사용
+            if not directory_id:
+                default_directory = self.watchlist_repo.ensure_default_directory(user_id)
+                directory_id = default_directory.id
+            
             watchlist = self.watchlist_repo.create_watchlist(
                 user_id=user_id,
                 stock_id=stock_id,
+                directory_id=directory_id,
                 category=category,
                 memo=memo,
                 target_price=target_price
@@ -203,19 +210,17 @@ class PortfolioService:
         category: Optional[str] = None
     ) -> SimplePage:
         """관심 종목 목록 조회"""
-        offset = (page - 1) * size
-        watchlists = self.watchlist_repo.get_by_user_id(
+        # Repository에서 페이징 처리된 결과를 가져옴
+        page_result = self.watchlist_repo.get_by_user_id(
             user_id=user_id,
             category=category,
-            offset=offset,
-            limit=size
+            page=page,
+            per_page=size
         )
-        
-        total_count = self.watchlist_repo.count_by_user_id(user_id, category)
         
         # 관심 종목 데이터 변환
         watchlist_data = []
-        for watchlist in watchlists:
+        for watchlist in page_result.items:
             current_price = (
                 watchlist.stock.current_price.current_price 
                 if watchlist.stock.current_price 
@@ -252,9 +257,9 @@ class PortfolioService:
         
         return SimplePage(
             items=watchlist_data,
-            page=page,
-            per_page=size,
-            has_next=offset + size < total_count
+            page=page_result.page,
+            per_page=page_result.per_page,
+            has_next=page_result.has_next
         )
 
     def update_watchlist(
@@ -312,3 +317,178 @@ class PortfolioService:
     def get_watchlist_categories(self, user_id: str) -> List[Dict[str, Any]]:
         """관심 종목 카테고리 목록 조회"""
         return self.watchlist_repo.get_categories_with_count(user_id)
+
+    # ========== 관심종목 디렉토리 관련 메서드 ==========
+
+    def create_watchlist_directory(
+        self,
+        user_id: str,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None
+    ) -> WatchlistDirectory:
+        """관심종목 디렉토리 생성"""
+        try:
+            directory = self.watchlist_repo.create_directory(
+                user_id=user_id,
+                name=name,
+                description=description,
+                color=color
+            )
+            self.db.commit()
+            return directory
+        except Exception as e:
+            self.db.rollback()
+            raise e
+
+    def get_watchlist_directories(
+        self,
+        user_id: str,
+        page: int = 1,
+        size: int = 20
+    ) -> SimplePage:
+        """사용자의 관심종목 디렉토리 목록 조회"""
+        # 기본 디렉토리 자동 생성 (기존 사용자 대응)
+        try:
+            self.watchlist_repo.ensure_default_directory(user_id)
+            self.db.commit()
+        except Exception as e:
+            print(f"⚠️ 기본 디렉토리 생성 실패: {e}")
+            self.db.rollback()
+        
+        # Repository에서 페이징 처리된 결과를 가져옴
+        page_result = self.watchlist_repo.get_directories_with_stats(user_id, page=page, per_page=size)
+        
+        # 응답 데이터 변환
+        directory_data = []
+        for item in page_result.items:
+            directory = item['directory']
+            watchlist_count = item['watchlist_count']
+            
+            directory_data.append({
+                'id': directory.id,
+                'user_id': directory.user_id,  # 누락된 user_id 필드 추가
+                'name': directory.name,
+                'description': directory.description,
+                'display_order': directory.display_order,
+                'color': directory.color,
+                'watchlist_count': watchlist_count,
+                'is_active': directory.is_active,
+                'created_at': directory.created_at.isoformat(),
+                'updated_at': directory.updated_at.isoformat()
+            })
+        
+        return SimplePage(
+            items=directory_data,
+            page=page_result.page,
+            per_page=page_result.per_page,
+            has_next=page_result.has_next
+        )
+
+    def get_watchlist_directory(self, user_id: str, directory_id: str) -> Optional[Dict[str, Any]]:
+        """관심종목 디렉토리 상세 조회 (디렉토리 내 관심종목 포함)"""
+        result = self.watchlist_repo.get_directory_with_watchlists(directory_id, user_id)
+        if not result:
+            return None
+        
+        directory = result['directory']
+        watchlists = result['watch_lists']
+        
+        # 관심종목 데이터 변환
+        watchlist_data = []
+        for watchlist in watchlists:
+            current_price = (
+                watchlist.stock.current_price.current_price 
+                if watchlist.stock.current_price 
+                else Decimal('0')
+            )
+            
+            watchlist_data.append({
+                'id': watchlist.id,
+                'stock': {
+                    'id': watchlist.stock.id,
+                    'code': watchlist.stock.code,
+                    'name': watchlist.stock.name,
+                    'market': watchlist.stock.market,
+                    'sector': watchlist.stock.sector,
+                    'current_price': float(current_price),
+                },
+                'memo': watchlist.memo,
+                'target_price': watchlist.target_price,
+                'display_order': watchlist.display_order,
+                'created_at': watchlist.created_at.isoformat()
+            })
+        
+        return {
+            'id': directory.id,
+            'user_id': directory.user_id,  # 누락된 user_id 필드 추가
+            'name': directory.name,
+            'description': directory.description,
+            'display_order': directory.display_order,
+            'color': directory.color,
+            'is_active': directory.is_active,
+            'created_at': directory.created_at.isoformat(),
+            'updated_at': directory.updated_at.isoformat(),
+            'watch_lists': watchlist_data
+        }
+
+    def update_watchlist_directory(
+        self,
+        user_id: str,
+        directory_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        color: Optional[str] = None
+    ) -> WatchlistDirectory:
+        """관심종목 디렉토리 수정"""
+        directory = self.watchlist_repo.get_directory_by_id_and_user(directory_id, user_id)
+        if not directory:
+            raise ValueError("디렉토리를 찾을 수 없습니다")
+        
+        try:
+            updated_directory = self.watchlist_repo.update_directory(
+                directory=directory,
+                name=name,
+                description=description,
+                color=color
+            )
+            self.db.commit()
+            return updated_directory
+        except Exception as e:
+            self.db.rollback()
+            raise e
+
+    def delete_watchlist_directory(self, user_id: str, directory_id: str):
+        """관심종목 디렉토리 삭제"""
+        # 기본 디렉토리는 삭제할 수 없음
+        default_directory_id = f"{user_id}-base"
+        if directory_id == default_directory_id:
+            raise ValueError("기본 디렉토리는 삭제할 수 없습니다")
+        
+        directory = self.watchlist_repo.get_directory_by_id_and_user(directory_id, user_id)
+        if not directory:
+            raise ValueError("디렉토리를 찾을 수 없습니다")
+        
+        try:
+            self.watchlist_repo.delete_directory(directory)
+            self.db.commit()
+        except Exception as e:
+            self.db.rollback()
+            raise e
+
+    def get_default_directory(self, user_id: str) -> Dict[str, Any]:
+        """사용자의 기본 디렉토리 조회"""
+        # 기본 디렉토리 자동 생성
+        default_directory = self.watchlist_repo.ensure_default_directory(user_id)
+        
+        return {
+            'id': default_directory.id,
+            'user_id': default_directory.user_id,  # 누락된 user_id 필드 추가
+            'name': default_directory.name,
+            'description': default_directory.description,
+            'display_order': default_directory.display_order,
+            'color': default_directory.color,
+            'is_active': default_directory.is_active,
+            'created_at': default_directory.created_at.isoformat(),
+            'updated_at': default_directory.updated_at.isoformat()
+        }

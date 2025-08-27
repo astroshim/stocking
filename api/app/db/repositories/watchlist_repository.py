@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, desc, func
 
 from app.db.repositories.base_repository import BaseRepository
-from app.db.models.transaction import WatchList
+from app.db.models.watchlist import WatchList, WatchlistDirectory
 from app.db.models.stock import Stock, StockPrice
+from app.utils.simple_paging import SimplePage, paginate_without_count
 
 
 class WatchListRepository(BaseRepository):
@@ -17,21 +18,23 @@ class WatchListRepository(BaseRepository):
         self, 
         user_id: str, 
         category: Optional[str] = None,
-        offset: int = 0,
-        limit: int = 20
-    ) -> List[WatchList]:
-        """사용자의 관심 종목 목록 조회"""
+        page: int = 1,
+        per_page: int = 20
+    ) -> SimplePage:
+        """사용자의 관심 종목 목록 조회 (페이징)"""
         query = self.session.query(WatchList).filter(WatchList.user_id == user_id)
         
         if category:
             query = query.filter(WatchList.category == category)
         
-        return query.options(
+        query = query.options(
             joinedload(WatchList.stock).joinedload(Stock.current_price)
         ).order_by(
             WatchList.display_order.asc(),
             WatchList.created_at.desc()
-        ).offset(offset).limit(limit).all()
+        )
+        
+        return paginate_without_count(query, page=page, per_page=per_page)
 
     def get_by_user_and_stock(self, user_id: str, stock_id: str) -> Optional[WatchList]:
         """사용자의 특정 종목 관심 목록 조회"""
@@ -57,6 +60,7 @@ class WatchListRepository(BaseRepository):
         self,
         user_id: str,
         stock_id: str,
+        directory_id: Optional[str] = None,
         category: str = "기본",
         memo: Optional[str] = None,
         target_price: Optional[float] = None
@@ -67,19 +71,27 @@ class WatchListRepository(BaseRepository):
         if existing:
             raise ValueError("이미 관심 종목에 추가된 주식입니다")
         
-        # 다음 표시 순서 계산
+        # 디렉토리가 지정된 경우 존재하는지 확인
+        if directory_id:
+            directory = self.get_directory_by_id_and_user(directory_id, user_id)
+            if not directory:
+                raise ValueError("존재하지 않는 디렉토리입니다")
+        
+        # 다음 표시 순서 계산 (디렉토리별로 분리)
+        filter_conditions = [WatchList.user_id == user_id]
+        if directory_id:
+            filter_conditions.append(WatchList.directory_id == directory_id)
+        else:
+            filter_conditions.append(WatchList.category == category)
+        
         max_order = self.session.query(
             func.max(WatchList.display_order)
-        ).filter(
-            and_(
-                WatchList.user_id == user_id,
-                WatchList.category == category
-            )
-        ).scalar() or 0
+        ).filter(and_(*filter_conditions)).scalar() or 0
         
         watchlist = WatchList(
             user_id=user_id,
             stock_id=stock_id,
+            directory_id=directory_id,
             category=category,
             memo=memo,
             target_price=target_price,
@@ -180,16 +192,16 @@ class WatchListRepository(BaseRepository):
                 'count': count
             })
         
-        # 기본 카테고리들이 없으면 추가 (개수 0으로)
-        existing_categories = {cat['name'] for cat in categories}
-        default_categories = ["기본", "관심주", "배당주", "성장주"]
+        # # 기본 카테고리들이 없으면 추가 (개수 0으로)
+        # existing_categories = {cat['name'] for cat in categories}
+        # default_categories = ["기본", "관심주", "배당주", "성장주"]
         
-        for default_cat in default_categories:
-            if default_cat not in existing_categories:
-                categories.append({
-                    'name': default_cat,
-                    'count': 0
-                })
+        # for default_cat in default_categories:
+        #     if default_cat not in existing_categories:
+        #         categories.append({
+        #             'name': default_cat,
+        #             'count': 0
+        #         })
         
         return categories
 
@@ -217,3 +229,251 @@ class WatchListRepository(BaseRepository):
         ).options(
             joinedload(WatchList.stock).joinedload(Stock.current_price)
         ).all()
+
+    # ========== 관심종목 디렉토리 관련 메서드 ==========
+    
+    def get_directories_by_user_id(
+        self, 
+        user_id: str,
+        offset: int = 0,
+        limit: int = 20
+    ) -> List[WatchlistDirectory]:
+        """사용자의 관심종목 디렉토리 목록 조회"""
+        return self.session.query(WatchlistDirectory).filter(
+            and_(
+                WatchlistDirectory.user_id == user_id,
+                WatchlistDirectory.is_active == True
+            )
+        ).order_by(
+            WatchlistDirectory.display_order.asc(),
+            WatchlistDirectory.created_at.desc()
+        ).offset(offset).limit(limit).all()
+
+    def get_directory_by_id_and_user(self, directory_id: str, user_id: str) -> Optional[WatchlistDirectory]:
+        """ID와 사용자로 디렉토리 조회"""
+        return self.session.query(WatchlistDirectory).filter(
+            and_(
+                WatchlistDirectory.id == directory_id,
+                WatchlistDirectory.user_id == user_id,
+                WatchlistDirectory.is_active == True
+            )
+        ).first()
+
+    def get_directory_by_name_and_user(self, name: str, user_id: str) -> Optional[WatchlistDirectory]:
+        """이름과 사용자로 디렉토리 조회"""
+        return self.session.query(WatchlistDirectory).filter(
+            and_(
+                WatchlistDirectory.name == name,
+                WatchlistDirectory.user_id == user_id,
+                WatchlistDirectory.is_active == True
+            )
+        ).first()
+
+    def create_directory(
+        self,
+        user_id: str,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None
+    ) -> WatchlistDirectory:
+        """새 관심종목 디렉토리 생성"""
+        # 같은 이름의 디렉토리가 이미 있는지 확인
+        existing = self.get_directory_by_name_and_user(name, user_id)
+        if existing:
+            raise ValueError("이미 존재하는 디렉토리 이름입니다")
+        
+        # 다음 표시 순서 계산
+        max_order = self.session.query(
+            func.max(WatchlistDirectory.display_order)
+        ).filter(WatchlistDirectory.user_id == user_id).scalar() or 0
+        
+        directory = WatchlistDirectory(
+            user_id=user_id,
+            name=name,
+            description=description,
+            color=color,
+            display_order=max_order + 1
+        )
+        
+        self.session.add(directory)
+        self.session.flush()
+        return directory
+
+    def update_directory(
+        self,
+        directory: WatchlistDirectory,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        color: Optional[str] = None
+    ) -> WatchlistDirectory:
+        """관심종목 디렉토리 정보 수정"""
+        # 이름 변경 시 중복 확인
+        if name and name != directory.name:
+            existing = self.get_directory_by_name_and_user(name, directory.user_id)
+            if existing:
+                raise ValueError("이미 존재하는 디렉토리 이름입니다")
+            directory.name = name
+        
+        if description is not None:
+            directory.description = description
+        if color is not None:
+            directory.color = color
+        
+        return directory
+
+    def delete_directory(self, directory: WatchlistDirectory):
+        """관심종목 디렉토리 삭제"""
+        # 디렉토리 내 관심종목들을 category 기반으로 변경
+        self.session.query(WatchList).filter(
+            WatchList.directory_id == directory.id
+        ).update({
+            WatchList.directory_id: None,
+            WatchList.category: "기본"
+        })
+        
+        # 삭제된 디렉토리보다 높은 순서의 디렉토리들을 한 칸씩 앞으로 이동
+        self.session.query(WatchlistDirectory).filter(
+            and_(
+                WatchlistDirectory.user_id == directory.user_id,
+                WatchlistDirectory.display_order > directory.display_order
+            )
+        ).update({
+            WatchlistDirectory.display_order: WatchlistDirectory.display_order - 1
+        })
+        
+        self.session.delete(directory)
+
+    def get_directories_with_stats(self, user_id: str, page: int = 1, per_page: int = 20) -> SimplePage:
+        """사용자의 디렉토리 목록과 관심종목 개수 조회 (페이징)"""
+        # 디렉토리별 관심종목 개수를 함께 조회하는 쿼리
+        query = self.session.query(
+            WatchlistDirectory,
+            func.count(WatchList.id).label('watchlist_count')
+        ).outerjoin(
+            WatchList, and_(
+                WatchlistDirectory.id == WatchList.directory_id,
+                WatchList.is_active == True
+            )
+        ).filter(
+            and_(
+                WatchlistDirectory.user_id == user_id,
+                WatchlistDirectory.is_active == True
+            )
+        ).group_by(WatchlistDirectory.id).order_by(
+            WatchlistDirectory.display_order.asc(),
+            WatchlistDirectory.created_at.desc()
+        )
+        
+        # paginate_without_count 사용하여 페이징 처리
+        page_result = paginate_without_count(query, page=page, per_page=per_page)
+        
+        # 결과를 Dictionary 형태로 변환
+        directories = []
+        for directory, count in page_result.items:
+            directories.append({
+                'directory': directory,
+                'watchlist_count': count
+            })
+        
+        # 변환된 데이터로 새로운 SimplePage 반환
+        return SimplePage(
+            items=directories,
+            page=page_result.page,
+            per_page=page_result.per_page,
+            has_next=page_result.has_next
+        )
+
+    def get_directory_with_watchlists(self, directory_id: str, user_id: str) -> Optional[Dict]:
+        """디렉토리와 해당 디렉토리의 관심종목 목록 조회"""
+        directory = self.get_directory_by_id_and_user(directory_id, user_id)
+        if not directory:
+            return None
+        
+        watchlists = self.session.query(WatchList).filter(
+            and_(
+                WatchList.directory_id == directory_id,
+                WatchList.is_active == True
+            )
+        ).options(
+            joinedload(WatchList.stock).joinedload(Stock.current_price)
+        ).order_by(
+            WatchList.display_order.asc(),
+            WatchList.created_at.desc()
+        ).all()
+        
+        return {
+            'directory': directory,
+            'watch_lists': watchlists
+        }
+
+    def count_directories_by_user_id(self, user_id: str) -> int:
+        """사용자의 디렉토리 개수 조회"""
+        return self.session.query(WatchlistDirectory).filter(
+            and_(
+                WatchlistDirectory.user_id == user_id,
+                WatchlistDirectory.is_active == True
+            )
+        ).count()
+
+    def ensure_default_directory(self, user_id: str) -> WatchlistDirectory:
+        """사용자의 기본 디렉토리 존재 확인 및 생성"""
+        # 예측 가능한 기본 디렉토리 ID 생성
+        default_directory_id = f"{user_id}-base"
+        
+        # ID로 먼저 조회 시도
+        default_directory = self.get_directory_by_id_and_user(default_directory_id, user_id)
+        
+        if not default_directory:
+            # 이름으로도 확인 (마이그레이션 대응)
+            default_directory = self.get_directory_by_name_and_user("기본", user_id)
+        
+        if not default_directory:
+            # 기본 디렉토리가 없으면 생성 (사용자 정의 ID 사용)
+            default_directory = self._create_directory_with_id(
+                directory_id=default_directory_id,
+                user_id=user_id,
+                name="기본",
+                description="기본 관심종목 디렉토리",
+                color="#007bff"  # 파란색
+            )
+            print(f"✅ 사용자 {user_id}의 기본 디렉토리 자동 생성 완료 (ID: {default_directory_id})")
+        
+        return default_directory
+
+    def _create_directory_with_id(
+        self,
+        directory_id: str,
+        user_id: str,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None
+    ) -> WatchlistDirectory:
+        """지정된 ID로 관심종목 디렉토리 생성 (내부 메서드)"""
+        # 같은 이름의 디렉토리가 이미 있는지 확인
+        existing = self.get_directory_by_name_and_user(name, user_id)
+        if existing:
+            raise ValueError("이미 존재하는 디렉토리 이름입니다")
+        
+        # 다음 표시 순서 계산
+        max_order = self.session.query(
+            func.max(WatchlistDirectory.display_order)
+        ).filter(WatchlistDirectory.user_id == user_id).scalar() or 0
+        
+        # 사용자 정의 ID로 디렉토리 생성
+        directory = WatchlistDirectory(
+            id=directory_id,  # 직접 ID 지정
+            user_id=user_id,
+            name=name,
+            description=description,
+            color=color,
+            display_order=max_order + 1
+        )
+        
+        self.session.add(directory)
+        self.session.flush()
+        return directory
+
+    def get_default_directory(self, user_id: str) -> Optional[WatchlistDirectory]:
+        """사용자의 기본 디렉토리 조회 (예측 가능한 ID 사용)"""
+        default_directory_id = f"{user_id}-base"
+        return self.get_directory_by_id_and_user(default_directory_id, user_id)

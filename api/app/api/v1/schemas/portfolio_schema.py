@@ -104,6 +104,7 @@ class WatchListBase(BaseModel):
 
 
 class WatchListCreate(WatchListBase):
+    directory_id: Optional[str] = Field(None, description="디렉토리 ID")
     target_price: Optional[Decimal] = Field(None, description="목표가")
     stop_loss_price: Optional[Decimal] = Field(None, description="손절가")
     memo: Optional[str] = Field(None, description="메모")
@@ -112,7 +113,7 @@ class WatchListCreate(WatchListBase):
     price_alert_lower: Optional[Decimal] = Field(None, description="하한 알림가")
     volume_alert_enabled: bool = Field(default=False, description="거래량 알림 활성화")
     volume_alert_threshold: Optional[Decimal] = Field(None, description="거래량 알림 기준")
-    category: Optional[str] = Field(None, description="카테고리")
+    category: Optional[str] = Field(None, description="카테고리 (구버전 호환)")
 
 
 class WatchListUpdate(BaseModel):
@@ -132,6 +133,7 @@ class WatchListResponse(InitVarModel):
     id: str
     user_id: str
     stock_id: str
+    directory_id: Optional[str]
     add_date: datetime
     target_price: Optional[Decimal]
     stop_loss_price: Optional[Decimal]
@@ -157,3 +159,44 @@ class WatchListWithStockResponse(WatchListResponse):
 
 class WatchListListResponse(PagedResponse[WatchListWithStockResponse]):
     pass
+
+
+# 관심종목 디렉토리 관련 스키마
+class WatchlistDirectoryBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50, description="디렉토리 이름")
+
+
+class WatchlistDirectoryCreate(WatchlistDirectoryBase):
+    description: Optional[str] = Field(None, max_length=200, description="디렉토리 설명")
+    color: Optional[str] = Field(None, pattern=r'^#[0-9A-Fa-f]{6}$', description="디렉토리 색상 (hex code)")
+
+
+class WatchlistDirectoryUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=50, description="디렉토리 이름")
+    description: Optional[str] = Field(None, max_length=200, description="디렉토리 설명")
+    color: Optional[str] = Field(None, pattern=r'^#[0-9A-Fa-f]{6}$', description="디렉토리 색상 (hex code)")
+    display_order: Optional[int] = Field(None, description="표시 순서")
+
+
+class WatchlistDirectoryResponse(InitVarModel):
+    id: str
+    user_id: str
+    name: str
+    description: Optional[str]
+    display_order: int
+    color: Optional[str]
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class WatchlistDirectoryWithStatsResponse(WatchlistDirectoryResponse):
+    watchlist_count: int = Field(..., description="디렉토리 내 관심종목 개수")
+
+
+class WatchlistDirectoryListResponse(PagedResponse[WatchlistDirectoryWithStatsResponse]):
+    pass
+
+
+class WatchlistDirectoryDetailResponse(WatchlistDirectoryResponse):
+    watch_lists: List[WatchListWithStockResponse] = Field(default_factory=list, description="디렉토리 내 관심종목 목록")

@@ -103,36 +103,3 @@ class TradingStatistics(UUIDMixin, Base):
         return f'<TradingStatistics {self.user_id}: {self.period_type} {self.period_start}>'
 
 
-class WatchList(UUIDMixin, Base):
-    """관심 종목"""
-    __tablename__ = 'watch_lists'
-
-    user_id = Column(String(36), ForeignKey('users.id'), nullable=False, comment='사용자 ID')
-    stock_id = Column(String(20), nullable=False, comment='주식 종목 코드 (예: 097230)')
-    
-    # 관심 종목 정보
-    add_date = Column(DateTime, nullable=False, default=datetime.now, comment='추가일')
-    target_price = Column(Numeric(10, 2), nullable=True, comment='목표가')
-    stop_loss_price = Column(Numeric(10, 2), nullable=True, comment='손절가')
-    memo = Column(Text, nullable=True, comment='메모')
-    
-    # 알림 설정
-    price_alert_enabled = Column(Boolean, nullable=False, default=False, comment='가격 알림 활성화')
-    price_alert_upper = Column(Numeric(10, 2), nullable=True, comment='상한 알림가')
-    price_alert_lower = Column(Numeric(10, 2), nullable=True, comment='하한 알림가')
-    volume_alert_enabled = Column(Boolean, nullable=False, default=False, comment='거래량 알림 활성화')
-    volume_alert_threshold = Column(Numeric(20, 0), nullable=True, comment='거래량 알림 기준')
-    
-    # 순서 및 카테고리
-    display_order = Column(Integer, nullable=False, default=0, comment='표시 순서')
-    category = Column(String(50), nullable=True, comment='카테고리')
-    
-    is_active = Column(Boolean, nullable=False, default=True, comment='활성 여부')
-    created_at = Column(DateTime, nullable=False, default=datetime.now)
-    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
-
-    # 관계 설정
-    user = relationship('User', back_populates='watch_lists')
-
-    def __repr__(self):
-        return f'<WatchList {self.user_id}: {self.stock_id}>'

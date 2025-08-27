@@ -10,12 +10,13 @@ from app.db.models.stock import Stock, StockPrice
 from app.db.models.order import Order, OrderExecution
 from app.db.models.portfolio import Portfolio
 from app.db.models.virtual_balance import VirtualBalance, VirtualBalanceHistory
-from app.db.models.transaction import Transaction, TradingStatistics, WatchList
+from app.db.models.transaction import Transaction, TradingStatistics
+from app.db.models.watchlist import WatchList, WatchlistDirectory
 
 # 모델 로딩 순서 문제 해결을 위해 아래와 같이 __all__ 변수를 정의
 __all__ = [
     'User', 'Comment', 'Report', 'ReportStatusHistory', 'Notice', 'Role', 'UserRole',
     'Stock', 'StockPrice', 'Order', 'OrderExecution', 
     'Portfolio', 'VirtualBalance', 'VirtualBalanceHistory',
-    'Transaction', 'TradingStatistics', 'WatchList'
+    'Transaction', 'TradingStatistics', 'WatchList', 'WatchlistDirectory'
 ]
