@@ -5,6 +5,7 @@
 ## 📋 목차
 
 - [시스템 아키텍처](#시스템-아키텍처)
+- [실시간 데이터 아키텍처](#실시간-데이터-아키텍처)
 - [주문 체결 흐름](#주문-체결-흐름)
 - [데이터베이스 관리](#데이터베이스-관리)
 - [로컬 개발 환경](#로컬-개발-환경)
@@ -25,6 +26,210 @@
 - **Migration**: Alembic
 - **Authentication**: JWT
 - **Payment**: PortOne (결제 연동)
+- **Realtime Data**: WebSocket + Redis
+- **Cache/Message**: Redis (데이터 공유)
+- **External API**: Toss Securities (실시간 주가)
+
+## 🔌 실시간 데이터 아키텍처
+
+### 독립 프로세스 구조
+
+본 시스템은 **확장성**과 **안정성**을 위해 실시간 데이터 처리를 별도 프로세스로 분리했습니다.
+
+```mermaid
+graph TD
+    A["Docker Compose"] --> B["Redis Container"]
+    A --> C["API Container"]
+    
+    C --> D["start_services.sh"]
+    D --> E["WebSocket Daemon"]
+    D --> F["FastAPI + Gunicorn"]
+    
+    E --> G["Toss WebSocket"]
+    E --> H["Redis 데이터 저장"]
+    
+    F --> I["API 엔드포인트"]
+    I --> J["Redis 데이터 조회"]
+    
+    K["클라이언트 요청"] --> I
+    I --> L["실시간 주가 응답"]
+    
+    G --> M["실시간 데이터"]
+    M --> H
+    H --> J
+    
+    style A fill:#e1f5fe
+    style E fill:#c8e6c9
+    style F fill:#fff3e0
+    style B fill:#ffebee
+    style G fill:#f3e5f5
+```
+
+### 핵심 컴포넌트
+
+#### 1. **WebSocket Daemon** (`websocket_daemon.py`)
+- Gunicorn worker와 **완전히 독립된 프로세스**
+- Toss Securities WebSocket 연결 관리
+- 실시간 주가 데이터 수신 및 Redis 저장
+- 자동 재연결 및 헬스체크
+
+#### 2. **Redis 데이터 레이어**
+- 실시간 주가 데이터 캐싱 (TTL: 1시간)
+- Pub/Sub을 통한 실시간 이벤트 전파
+- WebSocket 데몬 상태 모니터링
+- Pipeline을 통한 성능 최적화
+
+#### 3. **FastAPI 실시간 API**
+- Redis로부터 실시간 데이터 조회
+- 여러 종목 일괄 조회 지원
+- 데몬 상태 모니터링 API
+
+### 주요 장점
+
+✅ **완전한 프로세스 분리**
+- Gunicorn worker 수와 무관하게 WebSocket 연결 1개만 유지
+- 각 worker마다 중복 연결 방지로 리소스 효율성 극대화
+
+✅ **확장성**
+- FastAPI 서버 스케일링과 독립적으로 실시간 서비스 운영
+- 로드밸런서 적용 시에도 데이터 일관성 보장
+
+✅ **안정성**
+- 한 서비스 장애가 다른 서비스에 영향 없음
+- 자동 재시작 및 시그널 처리를 통한 안전한 종료
+
+✅ **동적 관리**
+- 서버 재시작 없이 실시간으로 구독 추가/해제
+- Redis Pub/Sub을 통한 안전한 명령 전송
+- WebSocket 연결 상태와 무관하게 구독 관리
+
+### 실시간 API 엔드포인트
+
+```bash
+# 단일 종목 실시간 조회
+GET /api/v1/trading/realtime/stock/{stock_code}
+
+# 여러 종목 일괄 조회
+GET /api/v1/trading/realtime/stocks/multiple?stock_codes=A005930&stock_codes=A000660
+
+# 모든 실시간 종목 조회
+GET /api/v1/trading/realtime/stocks/all
+
+# WebSocket 데몬 상태 확인
+GET /api/v1/trading/realtime/daemon/health
+```
+
+### 실행 방법
+
+#### **통합 서비스 실행**
+```bash
+# Redis + WebSocket 데몬 + FastAPI 한번에 시작
+./start_services.sh
+```
+
+#### **Docker Compose 실행**
+```bash
+# 전체 스택 실행 (Redis + API 서비스)
+docker-compose up -d
+
+# 로그 확인
+docker-compose logs -f
+```
+
+### 동적 구독 관리 시퀀스
+
+WebSocket 데몬의 구독을 실시간으로 추가/해제하는 시퀀스입니다:
+
+```mermaid
+sequenceDiagram
+    participant Client as "클라이언트"
+    participant API as "FastAPI"
+    participant Redis as "Redis"
+    participant Daemon as "WebSocket Daemon"
+    participant Toss as "Toss WebSocket"
+    
+    Note over Client,Toss: 동적 구독 추가 흐름
+    
+    Client->>API: POST /websocket/subscriptions/subscribe?topic=A000660
+    API->>Redis: PUBLISH commands {"type":"subscribe", "topic":"A000660"}
+    
+    Daemon->>Redis: LISTEN commands channel
+    Redis->>Daemon: Command: subscribe A000660
+    Daemon->>Daemon: Process subscribe command
+    Daemon->>Toss: STOMP SUBSCRIBE frame
+    Toss->>Daemon: RECEIPT/SUCCESS
+    
+    Daemon->>Redis: SET command_result:id {"success":true}
+    API->>Redis: GET command_result:id (polling)
+    Redis->>API: Result data
+    API->>Client: {"success": true, "message": "Subscribed"}
+    
+    Note over Daemon,Toss: 실시간 데이터 수신
+    Toss->>Daemon: Real-time stock data
+    Daemon->>Redis: SETEX stock:realtime:A000660
+    
+    Note over Client,Toss: 동적 구독 해제 흐름
+    
+    Client->>API: DELETE /websocket/subscriptions/unsubscribe?topic=A000660
+    API->>Redis: PUBLISH commands {"type":"unsubscribe", "topic":"A000660"}
+    
+    Redis->>Daemon: Command: unsubscribe A000660
+    Daemon->>Toss: STOMP UNSUBSCRIBE frame
+    Daemon->>Redis: SET command_result:id {"success":true}
+    API->>Client: {"success": true, "message": "Unsubscribed"}
+```
+
+### 동적 구독 관리 API
+
+```bash
+# 새로운 종목 구독 추가
+POST /api/v1/admin/websocket/subscriptions/subscribe?topic=/topic/v1/kr/stock/trade/A000660
+
+# 종목 구독 해제
+DELETE /api/v1/admin/websocket/subscriptions/unsubscribe?topic=/topic/v1/kr/stock/trade/A000660
+
+# 현재 구독 목록 조회
+GET /api/v1/admin/websocket/subscriptions
+```
+
+### 🔄 실제 동작 흐름
+
+동적 구독 관리의 전체 프로세스는 다음과 같습니다:
+
+```
+1. FastAPI 엔드포인트 → WebSocketCommandService 호출
+2. WebSocketCommandService → Redis에 명령 전송  
+3. WebSocket 데몬 → Redis에서 명령 수신
+4. WebSocket 데몬 → Toss WebSocket에 실제 구독/해제 실행
+5. WebSocket 데몬 → Redis에 결과 저장
+6. WebSocketCommandService → 폴링으로 결과 조회
+7. FastAPI 엔드포인트 → 클라이언트에 응답
+```
+
+#### 🎯 **각 단계별 세부 동작**
+
+**1단계**: 클라이언트가 구독 API 호출
+- `POST /api/v1/admin/websocket/subscriptions/subscribe?topic=A000660`
+
+**2단계**: Redis Pub/Sub으로 명령 전송
+- 채널: `websocket_daemon:commands`
+- 데이터: `{"type": "subscribe", "topic": "A000660", "command_id": "uuid"}`
+
+**3단계**: 데몬이 명령 수신 및 처리
+- `_listen_for_commands()` → `_process_command()` → `_handle_subscribe_command()`
+
+**4단계**: 실제 WebSocket 구독 실행
+- STOMP `SUBSCRIBE` 프레임을 Toss로 전송
+
+**5단계**: 결과를 Redis에 저장
+- 키: `websocket_daemon:command_result:{command_id}`
+- 값: `{"success": true, "message": "Successfully subscribed"}`
+
+**6단계**: API가 결과 폴링 (최대 30초)
+- 0.5초마다 Redis에서 결과 확인
+
+**7단계**: 클라이언트에 최종 응답
+- `{"success": true, "message": "구독 추가 성공"}`
 
 ## 🔄 주문 체결 흐름
 
@@ -180,21 +385,57 @@ python db_manager.py status
 
 ### 개발 서버 실행
 
+#### **방법 1: 통합 서비스 실행 (권장)**
 ```bash
 # 의존성 설치
 uv sync
 
-# 개발 서버 시작
-uv run python main.py
+# Redis 시작 (백그라운드)
+redis-server --daemonize yes
 
-# 또는 Gunicorn 사용
-WORKER=1 uv run gunicorn main:app
+# 통합 서비스 시작 (WebSocket 데몬 + FastAPI)
+./start_services.sh
+```
+
+#### **방법 2: 개별 서비스 실행**
+```bash
+# Redis 시작
+redis-server --daemonize yes
+
+# WebSocket 데몬 시작 (터미널 1)
+python3 websocket_daemon.py
+
+# FastAPI 서버 시작 (터미널 2)
+uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+#### **방법 3: Docker Compose 실행**
+```bash
+# 전체 스택 시작
+docker-compose up -d
+
+# 개발 모드로 시작 (로그 확인)
+docker-compose up
 ```
 
 ### API 문서 확인
 
-개발 서버 실행 후 다음 URL에서 Swagger UI를 확인할 수 있습니다:
-- http://localhost:5100/docs
+개발 서버 실행 후 다음 URL에서 확인할 수 있습니다:
+- **Swagger UI**: http://localhost:8000/docs
+- **실시간 데이터**: http://localhost:8000/api/v1/trading/realtime/stocks/all
+- **데몬 상태**: http://localhost:8000/api/v1/trading/realtime/daemon/health
+- **구독 관리**: http://localhost:8000/api/v1/admin/websocket/subscriptions
+
+### 동적 구독 테스트
+
+```bash
+# 동적 구독 기능 테스트
+python3 test_dynamic_subscription.py
+
+# 수동 API 테스트
+curl -X POST "http://localhost:8000/api/v1/admin/websocket/subscriptions/subscribe?topic=/topic/v1/kr/stock/trade/A000660" \
+     -H "Authorization: Bearer YOUR_TOKEN"
+```
 
 ### MySQL 서버 실행 (선택사항)
 
@@ -261,12 +502,26 @@ mysql -ustocking -h 127.0.0.1 -p -D stocking -P 13306
 프로덕션 배포 시 다음 환경 변수들을 설정해야 합니다:
 
 ```bash
+# 기본 설정
 PYTHON_ENV=production
 DATABASE_URI=mysql+pymysql://stocking:password@host/stocking
 JWT_SECRET_KEY=your-secret-key
+
+# Redis 설정
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_DB=0
+
+# 결제 서비스
 PORTONE_STORE_ID=your-store-id
 PORTONE_V1_API_SECRET=your-api-secret
-# ... 기타 환경 변수
+
+# 로그 레벨
+LOG_LEVEL=INFO
+
+# Docker/Gunicorn 설정
+WORKERS=4
+ENVIRONMENT=production
 ```
 
 ## 📂 프로젝트 구조
@@ -277,14 +532,26 @@ app/
 │   ├── schemas/           # 공통 스키마
 │   └── v1/               # API v1
 │       ├── endpoints/     # 컨트롤러
+│       │   ├── realtime_controller.py      # 실시간 데이터 API
+│       │   └── websocket_controller.py     # WebSocket 관리 API
 │       └── schemas/       # v1 스키마
+│           └── stock_schemas.py            # 주식 데이터 스키마
 ├── config/               # 설정 파일
 ├── db/                  # 데이터베이스
 │   ├── models/          # SQLAlchemy 모델
 │   └── repositories/    # 레포지토리 패턴
 ├── services/            # 비즈니스 로직
+│   ├── redis_service.py              # Redis 클라이언트
+│   ├── toss_proxy_service.py         # Toss API 프록시
+│   └── toss_websocket_service.py     # WebSocket 서비스
 ├── utils/              # 유틸리티 함수
 └── exceptions/         # 커스텀 예외
+
+# 루트 레벨 파일
+websocket_daemon.py             # 독립 WebSocket 데몬 프로세스
+start_services.sh               # 통합 서비스 실행 스크립트
+docker-compose.yml              # Docker Compose 설정
+test_dynamic_subscription.py    # 동적 구독 테스트 스크립트
 ```
 
 ## 포트원 사용방법
@@ -357,6 +624,37 @@ async function onPayClick() {
 
 - **Alembic**: 데이터베이스 마이그레이션
 - **UV**: Python 패키지 관리
-- **Gunicorn**: WSGI 서버
+- **Gunicorn**: WSGI 서버 (프로덕션)
+- **Uvicorn**: ASGI 서버 (개발)
 - **Docker**: 컨테이너화
+- **Redis**: 캐시 및 메시지 브로커
+- **WebSockets**: 실시간 통신
 - **pytest**: 테스트 프레임워크
+
+## 🚀 배포 파일
+
+### 주요 배포 파일
+- `start_services.sh`: 통합 서비스 실행 스크립트
+- `docker-compose.yml`: Redis + API 서비스 구성
+- `websocket_daemon.py`: 독립 WebSocket 데몬
+- `Dockerfile`: API 서버 컨테이너 이미지
+- `gunicorn.conf.py`: Gunicorn 설정
+
+### 서비스 상태 확인
+```bash
+# 프로세스 확인
+ps aux | grep websocket_daemon
+ps aux | grep gunicorn
+
+# Redis 연결 확인
+redis-cli ping
+
+# API 헬스체크
+curl http://localhost:8000/api/v1/trading/realtime/daemon/health
+
+# 구독 목록 확인
+curl http://localhost:8000/api/v1/admin/websocket/subscriptions
+
+# 동적 구독 테스트
+python3 test_dynamic_subscription.py
+```

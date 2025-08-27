@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     user_controller,
 )
 
+
 def create_app():
     app = FastAPI(
         title="stocking API",

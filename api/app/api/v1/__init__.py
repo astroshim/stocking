@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import user_controller, report_controller, \
     storage_controller, auth_controller, comment_controller, role_controller, payment_controller, \
-    notice_controller, stock_controller, order_controller, portfolio_controller, trading_controller, ws_controller, toss_requester_controller, routine_marketing_controller, watchlist_controller
+    notice_controller, stock_controller, order_controller, portfolio_controller, trading_controller, ws_controller, toss_requester_controller, routine_marketing_controller, watchlist_controller, websocket_controller, realtime_controller
 
 api_v1_router = APIRouter()
 
@@ -20,6 +20,8 @@ api_v1_router.include_router(ws_controller.router, prefix="/trading", tags=["실
 api_v1_router.include_router(watchlist_controller.router, prefix="/watchlist", tags=["관심종목 관리"])
 
 api_v1_router.include_router(toss_requester_controller.router, prefix="/proxy", tags=["toss 프록시"])
+api_v1_router.include_router(websocket_controller.router, prefix="/admin", tags=["WebSocket 관리"])
+api_v1_router.include_router(realtime_controller.router, prefix="/trading", tags=["실시간 데이터"])
 
 # api_v1_router.include_router(report_controller.router, prefix="/reports", tags=["신고 관리"])
 # api_v1_router.include_router(comment_controller.router, prefix="/comments", tags=["댓글 관리"])

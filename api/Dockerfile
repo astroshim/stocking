@@ -57,5 +57,8 @@ COPY pyproject.toml uv.lock ./
 # 컨테이너에서 사용할 포트를 명시적으로 지정
 EXPOSE 8000
 
-# 애플리케이션 실행
-CMD ["uv", "run", "gunicorn", "main:app", "--config", "gunicorn.conf.py"]
+# 스크립트 실행 권한 부여
+RUN chmod +x start_services.sh websocket_daemon.py
+
+# 애플리케이션 실행 (통합 서비스 스크립트 사용)
+CMD ["./start_services.sh"]

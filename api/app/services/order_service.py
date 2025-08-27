@@ -11,18 +11,22 @@ from app.db.repositories.portfolio_repository import PortfolioRepository
 from app.services.transaction_service import TransactionService
 from app.db.models.order import Order, OrderStatus, OrderType, OrderMethod, ExitReason
 from app.db.models.virtual_balance import VirtualBalance
+from app.services.toss_proxy_service import TossProxyService
 from app.utils.transaction_manager import TransactionManager
 from app.exceptions.custom_exceptions import ValidationError, NotFoundError, InsufficientBalanceError
+from app.api.v1.schemas.stock_schemas import StockPriceDetailsResponse
 
 
 class OrderService:
     """주문 관련 비즈니스 로직을 처리하는 서비스"""
 
-    def __init__(self, order_repository: OrderRepository, virtual_balance_repository: VirtualBalanceRepository):
+    def __init__(self, order_repository: OrderRepository, virtual_balance_repository: VirtualBalanceRepository, toss_proxy_service: TossProxyService):
         self.order_repository = order_repository
         self.virtual_balance_repository = virtual_balance_repository
         self.portfolio_repository = PortfolioRepository(order_repository.session)
         self.transaction_service = TransactionService(order_repository.session)
+
+        self.toss_proxy_service = toss_proxy_service
 
     def create_order(self, user_id: str, order_data: Dict[str, Any]) -> Order:
         """새로운 주문을 생성합니다."""
@@ -327,10 +331,40 @@ class OrderService:
         self._update_portfolio_for_execution(order, execution)
 
     def _get_current_price(self, stock_id: str) -> Decimal:
-        """현재가를 조회합니다. (실제로는 외부 API 호출)"""
-        # TODO: 실제 주가 API 연동
-        # 현재는 임시로 10000원 반환
-        raise ValidationError("시장가 is Not implemented")
+        """현재가를 조회합니다. (Toss API에서 종목 거래 현황 조회)"""
+        try:
+            # stock_id를 product_code로 사용합니다
+            # (실제 구현에서는 Stock 테이블에서 product_code를 조회해야 할 수 있습니다)
+            product_code = stock_id
+            
+            # TossProxyService를 사용하여 종목 거래 현황을 조회합니다
+            stock_price_raw = self.toss_proxy_service.get_stock_price_details(product_code)
+            print(f"-----------> stock_price_raw: {stock_price_raw}")
+            
+            # 스키마를 사용하여 응답 검증 및 파싱
+            try:
+                stock_price_response = StockPriceDetailsResponse(**stock_price_raw)
+            except Exception as parse_error:
+                raise ValidationError(f"Invalid response format for stock {stock_id}: {str(parse_error)}")
+            
+            # 결과 데이터 확인
+            if not stock_price_response.result:
+                raise ValidationError(f"No price data found for stock: {stock_id}")
+            
+            # 첫 번째 결과에서 현재가(close) 추출
+            first_result = stock_price_response.result[0]
+            current_price = first_result.close
+
+            print(f"-----------> current_price: {current_price}")
+             
+            return Decimal(str(current_price))
+            
+        except Exception as e:
+            if isinstance(e, ValidationError):
+                raise
+            raise ValidationError(f"Failed to get current price for stock {stock_id}: {str(e)}")
+
+
 
     def _calculate_commission(self, amount: Decimal) -> Decimal:
         """거래 수수료를 계산합니다."""

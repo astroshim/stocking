@@ -53,10 +53,12 @@ def order_service_factory(db: Session = None):
     from app.db.repositories.order_repository import OrderRepository
     from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
     from app.services.order_service import OrderService
+    from app.services.toss_proxy_service import TossProxyService
     
     order_repository = OrderRepository(db)
     virtual_balance_repository = VirtualBalanceRepository(db)
-    return OrderService(order_repository, virtual_balance_repository)
+    toss_proxy_service = TossProxyService()
+    return OrderService(order_repository, virtual_balance_repository, toss_proxy_service)
 
 
 def transaction_service_factory(db: Session = None):

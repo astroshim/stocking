@@ -331,26 +331,26 @@ async def cancel_order(
 #         raise HTTPException(status_code=500, detail=f"주문 체결 실패: {str(e)}")
 
 
-@router.post("/orders/{order_id}", summary="주문 체결 (주문가로 체결)")
-async def fill_order(
-    order_id: str,
-    current_user_id: str = Depends(get_current_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """간단 체결 API. 주문 가격으로 체결합니다."""
-    try:
-        # 주문 정보를 조회하여 주문가로 체결
-        order = order_service.get_order_by_id(current_user_id, order_id)
-        executed_order = order_service.execute_order(current_user_id, order_id, Decimal(order.order_price))
-        order_response = OrderResponse.model_validate(executed_order)
-        return create_response(
-            data=order_response.model_dump(),
-            message="주문이 성공적으로 체결되었습니다."
-        )
-    except NotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"주문 체결 실패: {str(e)}")
+# @router.post("/orders/{order_id}", summary="주문 체결 (주문가로 체결)")
+# async def fill_order(
+#     order_id: str,
+#     current_user_id: str = Depends(get_current_user),
+#     order_service: OrderService = Depends(get_order_service)
+# ):
+#     """간단 체결 API. 주문 가격으로 체결합니다."""
+#     try:
+#         # 주문 정보를 조회하여 주문가로 체결
+#         order = order_service.get_order_by_id(current_user_id, order_id)
+#         executed_order = order_service.execute_order(current_user_id, order_id, Decimal(order.order_price))
+#         order_response = OrderResponse.model_validate(executed_order)
+#         return create_response(
+#             data=order_response.model_dump(),
+#             message="주문이 성공적으로 체결되었습니다."
+#         )
+#     except NotFoundError as e:
+#         raise HTTPException(status_code=404, detail=str(e))
+#     except ValidationError as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"주문 체결 실패: {str(e)}")
 
