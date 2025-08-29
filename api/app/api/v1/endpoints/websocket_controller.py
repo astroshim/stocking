@@ -4,6 +4,7 @@ WebSocket 관리 컨트롤러
 실시간 WebSocket 서비스 상태 확인 및 관리 기능 제공
 동적 구독/구독해제 기능 포함
 """
+import logging
 from fastapi import APIRouter, Depends, Query
 from typing import Dict, Any, List
 
@@ -13,6 +14,7 @@ from app.services.websocket_command_service import get_websocket_command_service
 from app.utils.response_helper import create_response
 
 router = APIRouter(tags=["WebSocket"])
+logger = logging.getLogger(__name__)
 
 
 @router.get("/websocket/daemon/health", summary="WebSocket 데몬 상태 확인")
@@ -143,24 +145,24 @@ async def reconnect_websocket(
         result = await command_service.send_reconnect_command()
         
         if result.get('success'):
-            return create_response(data={
+            return create_response({
                 "success": True,
                 "message": "WebSocket 재연결 성공",
                 "connection_status": result.get('connection_status', {}),
                 "command_id": result.get('command_id')
             })
         else:
-            return create_response(data={
+            return create_response({
                 "success": False,
                 "message": result.get('message', 'WebSocket 재연결 실패'),
                 "connection_status": result.get('connection_status', {}),
                 "command_id": result.get('command_id')
-            }, code=500)
+            })
             
     except Exception as e:
         logger.error(f"❌ WebSocket reconnection API error: {e}")
-        return create_response(data={
+        return create_response({
             "success": False,
             "message": "재연결 요청 실패",
             "error": str(e)
-        }, code=500)
+        })
