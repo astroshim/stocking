@@ -19,7 +19,7 @@ api_v1_router.include_router(ws_controller.router, prefix="/trading", tags=["실
 # 관심종목 관리 (독립 라우터)
 api_v1_router.include_router(watchlist_controller.router, prefix="/watchlist", tags=["관심종목 관리"])
 
-api_v1_router.include_router(toss_requester_controller.router, prefix="/proxy", tags=["toss 프록시"])
+api_v1_router.include_router(toss_requester_controller.router, prefix="/stocks", tags=["toss 프록시"])
 api_v1_router.include_router(websocket_controller.router, prefix="/admin", tags=["WebSocket 관리"])
 api_v1_router.include_router(realtime_controller.router, prefix="/trading", tags=["실시간 데이터"])
 

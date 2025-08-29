@@ -6,6 +6,7 @@ Redis 서비스
 import json
 import logging
 import os
+import time
 from typing import Dict, Any, Optional, List
 import asyncio
 
@@ -102,7 +103,7 @@ class RedisService:
             return {}
     
     async def get_websocket_daemon_health(self) -> Optional[Dict[str, Any]]:
-        """WebSocket 데몬 헬스체크 정보 조회"""
+        """WebSocket 데몬 헬스체크 정보 조회 (실시간 상태 분석 포함)"""
         try:
             if not self.redis_client:
                 await self.connect()
@@ -110,13 +111,81 @@ class RedisService:
             health_data = await self.redis_client.get('websocket_daemon:health')
             
             if health_data:
-                return json.loads(health_data)
+                parsed_data = json.loads(health_data)
+                
+                # 실시간 상태 분석 추가
+                current_time = time.time()
+                last_updated = parsed_data.get('last_updated', 0)
+                time_since_update = current_time - last_updated
+                
+                # 실제 프로세스 상태 판단 (업데이트 주기가 20초로 변경됨에 따라 조정)
+                is_stale = time_since_update > 45  # 45초 이상 업데이트 없으면 stale (20초 × 2 + 여유분)
+                is_likely_dead = time_since_update > 90  # 90초 이상 업데이트 없으면 dead로 간주 (20초 × 4 + 여유분)
+                
+                # 추가 정보 포함
+                parsed_data['analysis'] = {
+                    'current_time': current_time,
+                    'time_since_last_update': time_since_update,
+                    'time_since_last_update_formatted': self._format_time_ago(time_since_update),
+                    'is_stale': is_stale,
+                    'is_likely_dead': is_likely_dead,
+                    'status': self._determine_daemon_status(is_stale, is_likely_dead, parsed_data)
+                }
+                
+                return parsed_data
             else:
-                return None
+                return {
+                    'analysis': {
+                        'current_time': time.time(),
+                        'is_stale': True,
+                        'is_likely_dead': True,
+                        'status': 'NO_DATA',
+                        'message': 'Redis에서 헬스 데이터를 찾을 수 없습니다.'
+                    }
+                }
                 
         except Exception as e:
             self.logger.error(f"❌ Failed to get daemon health: {e}")
             return None
+    
+    def _format_time_ago(self, seconds_ago: float) -> str:
+        """시간을 '몇 초 전' 형태로 포맷"""
+        try:
+            seconds = int(seconds_ago)
+            
+            if seconds < 60:
+                return f"{seconds}초 전"
+            elif seconds < 3600:
+                minutes = seconds // 60
+                return f"{minutes}분 전"
+            elif seconds < 86400:
+                hours = seconds // 3600
+                return f"{hours}시간 전"
+            else:
+                days = seconds // 86400
+                return f"{days}일 전"
+                
+        except Exception:
+            return f"{seconds_ago:.1f}초 전"
+    
+    def _determine_daemon_status(self, is_stale: bool, is_likely_dead: bool, health_data: dict) -> str:
+        """데몬 상태 판단"""
+        try:
+            if is_likely_dead:
+                return 'DEAD'
+            elif is_stale:
+                return 'STALE'
+            elif not health_data.get('websocket_connected', False):
+                return 'WEBSOCKET_DISCONNECTED'
+            elif not health_data.get('websocket_running', False):
+                return 'WEBSOCKET_STOPPED'
+            elif not health_data.get('redis_connected', False):
+                return 'REDIS_DISCONNECTED'
+            else:
+                return 'HEALTHY'
+                
+        except Exception:
+            return 'UNKNOWN'
     
     async def subscribe_to_stock_updates(self, stock_code: str, callback):
         """주식 업데이트 구독 (Pub/Sub)"""

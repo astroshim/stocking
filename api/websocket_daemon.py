@@ -29,6 +29,7 @@ class WebSocketDaemon:
         self.running = False
         self.websocket_service = TossWebSocketService()
         self.redis_client: redis.Redis = None
+        self.start_time = time.time()  # 데몬 시작 시간
         
         # 로깅 설정
         logging.basicConfig(
@@ -187,8 +188,8 @@ class WebSocketDaemon:
                 # 헬스체크 정보 업데이트
                 await self._update_health_status()
                 
-                # 30초마다 상태 업데이트
-                await asyncio.sleep(30)
+                # 20초마다 상태 업데이트 (더 빠른 주기로 안정성 향상)
+                await asyncio.sleep(20)
                 
         except asyncio.CancelledError:
             self.logger.info("🛑 Main loop cancelled")
@@ -229,6 +230,8 @@ class WebSocketDaemon:
                 await self._handle_unsubscribe_command(topic, command_id)
             elif command_type == 'get_subscriptions':
                 await self._handle_get_subscriptions_command(command_id)
+            elif command_type == 'reconnect':
+                await self._handle_reconnect_command(command_data)
             else:
                 self.logger.warning(f"⚠️ Unknown command type: {command_type}")
                 
@@ -368,13 +371,86 @@ class WebSocketDaemon:
             
         except Exception as e:
             self.logger.error(f"❌ Get subscriptions command failed: {e}")
+    
+    async def _handle_reconnect_command(self, command_data: dict):
+        """재연결 명령 처리"""
+        try:
+            command_id = command_data.get('command_id')
+            self.logger.info(f"🔄 Processing reconnect command: {command_id}")
+            
+            # WebSocket 재연결 시도
+            success = await self.websocket_service.reconnect()
+            
+            if success:
+                result_data = {
+                    'command_id': command_id,
+                    'success': True,
+                    'message': 'WebSocket reconnection successful',
+                    'connection_status': {
+                        'websocket_connected': self.websocket_service.is_connected,
+                        'websocket_running': self.websocket_service.is_running,
+                        'subscription_count': len(self.websocket_service.subscriptions)
+                    }
+                }
+                self.logger.info("✅ WebSocket reconnection successful")
+            else:
+                result_data = {
+                    'command_id': command_id,
+                    'success': False,
+                    'message': 'WebSocket reconnection failed',
+                    'connection_status': {
+                        'websocket_connected': self.websocket_service.is_connected,
+                        'websocket_running': self.websocket_service.is_running,
+                        'subscription_count': len(self.websocket_service.subscriptions)
+                    }
+                }
+                self.logger.error("❌ WebSocket reconnection failed")
+            
+            # 결과를 Redis에 저장
+            await self.redis_client.setex(
+                f'websocket_daemon:command_result:{command_id}',
+                60,  # 1분 TTL
+                json.dumps(result_data)
+            )
+            
+            self.logger.info(f"✅ Reconnect command processed: {command_id}")
+            
+        except Exception as e:
+            self.logger.error(f"❌ Reconnect command failed: {e}")
+            
+            # 실패 결과 저장
+            if 'command_id' in locals():
+                try:
+                    error_result = {
+                        'command_id': command_id,
+                        'success': False,
+                        'message': f'Reconnection error: {str(e)}',
+                        'connection_status': {
+                            'websocket_connected': False,
+                            'websocket_running': False,
+                            'subscription_count': 0
+                        }
+                    }
+                    await self.redis_client.setex(
+                        f'websocket_daemon:command_result:{command_id}',
+                        60,
+                        json.dumps(error_result)
+                    )
+                except Exception as redis_e:
+                    self.logger.error(f"❌ Failed to save error result: {redis_e}")
 
     async def _update_health_status(self):
         """헬스체크 상태 업데이트"""
         try:
+            current_time = time.time()
+            uptime_seconds = current_time - self.start_time
+            
             health_data = {
                 'daemon_pid': os.getpid(),
-                'uptime': time.time(),
+                'start_time': self.start_time,
+                'last_updated': current_time,
+                'uptime_seconds': uptime_seconds,
+                'uptime_formatted': self._format_uptime(uptime_seconds),
                 'websocket_connected': self.websocket_service.is_connected,
                 'websocket_running': self.websocket_service.is_running,
                 'subscriptions': self.websocket_service.subscriptions,
@@ -384,12 +460,55 @@ class WebSocketDaemon:
             
             await self.redis_client.setex(
                 'websocket_daemon:health',
-                120,  # 2분 TTL
+                300,  # 5분 TTL (30초 × 10회 여유)
                 json.dumps(health_data)
             )
             
+            self.logger.debug(f"✅ Health status updated successfully")
+            
         except Exception as e:
-            self.logger.warning(f"⚠️ Health status update failed: {e}")
+            self.logger.error(f"❌ Health status update failed: {e}")
+            # 재시도 로직
+            try:
+                self.logger.info("🔄 Retrying health status update...")
+                await asyncio.sleep(2)  # 2초 대기 후 재시도
+                await self.redis_client.setex(
+                    'websocket_daemon:health',
+                    300,  # 5분 TTL
+                    json.dumps(health_data)
+                )
+                self.logger.info("✅ Health status update retry successful")
+            except Exception as retry_e:
+                self.logger.error(f"💥 Health status update retry failed: {retry_e}")
+                # Redis 연결 재시도
+                try:
+                    await self._connect_redis()
+                    self.logger.info("🔗 Redis reconnection successful")
+                except Exception as conn_e:
+                    self.logger.error(f"🔌 Redis reconnection failed: {conn_e}")
+    
+    def _format_uptime(self, uptime_seconds: float) -> str:
+        """업타임을 읽기 쉬운 형태로 포맷"""
+        try:
+            seconds = int(uptime_seconds)
+            
+            if seconds < 60:
+                return f"{seconds}초"
+            elif seconds < 3600:
+                minutes = seconds // 60
+                remaining_seconds = seconds % 60
+                return f"{minutes}분 {remaining_seconds}초"
+            elif seconds < 86400:
+                hours = seconds // 3600
+                remaining_minutes = (seconds % 3600) // 60
+                return f"{hours}시간 {remaining_minutes}분"
+            else:
+                days = seconds // 86400
+                remaining_hours = (seconds % 86400) // 3600
+                return f"{days}일 {remaining_hours}시간"
+                
+        except Exception:
+            return f"{uptime_seconds:.1f}초"
 
 
 async def main():

@@ -291,6 +291,44 @@ class TossWebSocketService:
             self.logger.error(f"❌ Connection failed: {e}")
             return False
     
+    async def reconnect(self) -> bool:
+        """WebSocket 재연결"""
+        try:
+            self.logger.info("🔄 Starting WebSocket reconnection...")
+            
+            # 기존 연결 정리
+            await self._disconnect()
+            
+            # 새로운 연결 시도
+            success = await self._connect()
+            
+            if success:
+                # 기존 구독 목록 재구독
+                if self.subscriptions:
+                    self.logger.info(f"🔄 Re-subscribing to {len(self.subscriptions)} topics...")
+                    failed_subscriptions = []
+                    
+                    for topic in self.subscriptions.copy():  # 복사본 사용
+                        subscription_id = str(uuid.uuid4())
+                        if not await self._subscribe(topic, subscription_id):
+                            failed_subscriptions.append(topic)
+                            self.logger.warning(f"⚠️ Failed to re-subscribe to {topic}")
+                    
+                    if failed_subscriptions:
+                        self.logger.warning(f"⚠️ Failed to re-subscribe to {len(failed_subscriptions)} topics")
+                    else:
+                        self.logger.info("✅ All subscriptions restored successfully")
+                
+                self.logger.info("✅ WebSocket reconnection successful")
+                return True
+            else:
+                self.logger.error("❌ WebSocket reconnection failed")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Reconnection error: {e}")
+            return False
+    
     async def _disconnect(self) -> None:
         """연결 해제"""
         self.is_connected = False

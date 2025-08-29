@@ -63,7 +63,7 @@ trap cleanup SIGTERM SIGINT
 
 echo "📡 Starting WebSocket Daemon..."
 # WebSocket 데몬 백그라운드 실행
-python3 websocket_daemon.py &
+uv run websocket_daemon.py &
 DAEMON_PID=$!
 echo $DAEMON_PID > /tmp/websocket_daemon.pid
 echo "✅ WebSocket Daemon started (PID: $DAEMON_PID)"
@@ -81,10 +81,10 @@ echo "🌐 Starting FastAPI Server..."
 # FastAPI 서버 시작
 if [ "$ENVIRONMENT" = "production" ]; then
     # 프로덕션: Gunicorn 사용
-    gunicorn main:app -c gunicorn.conf.py &
+    uv run gunicorn main:app -c gunicorn.conf.py &
 else
     # 개발: Uvicorn 사용
-    uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+    uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
 fi
 
 FASTAPI_PID=$!

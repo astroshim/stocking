@@ -150,7 +150,7 @@ SCREENER_CATEGORIES = {
 
 
 # ===== 메인 페이지 관련 API =====
-@router.get("/t/main/indicators", summary="메인 - 지수/환율")
+@router.get("/main/indicators", summary="메인 - 지수/환율")
 def proxy_main_indicators(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -159,7 +159,7 @@ def proxy_main_indicators(
     return create_response(data, message="OK")
 
 
-@router.get("/t/main/news-highlight", summary="메인 - 뉴스 하이라이트")
+@router.get("/main/news-highlight", summary="메인 - 뉴스 하이라이트")
 def proxy_main_news_highlight(
     market: str = Query("all", description="시장 구분"),
     current_user_id: str = Depends(get_current_user),
@@ -170,7 +170,7 @@ def proxy_main_news_highlight(
     return create_response(data, message="OK")
 
 
-@router.get("/t/main/hot-community", summary="메인 - 핫 커뮤니티")
+@router.get("/main/hot-community", summary="메인 - 핫 커뮤니티")
 def proxy_main_hot_community(
     tag: str = Query("ALL", description="태그 필터"),
     current_user_id: str = Depends(get_current_user),
@@ -183,7 +183,7 @@ def proxy_main_hot_community(
 
 # ===== 지수 관련 API =====
 
-@router.get("/t/index/nasdaq", summary="나스닥 현재가")
+@router.get("/index/nasdaq", summary="나스닥 현재가")
 def proxy_nasdaq_price(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -192,7 +192,7 @@ def proxy_nasdaq_price(
     return create_response(data, message="OK")
 
 
-@router.get("/t/index/nasdaq/chart", summary="나스닥 차트")
+@router.get("/index/nasdaq/chart", summary="나스닥 차트")
 def proxy_nasdaq_chart(
     period: str = Query("1d", description="기간 (1d, 5d, 1m, 3m, 6m, 1y, 3y, 5y, 10y)"),
     interval: str = Query("min:5", description="인터벌 (min:1, min:5, min:10, min:30, min:60, day:1)"),
@@ -211,7 +211,7 @@ def proxy_nasdaq_chart(
     return create_response(data, message="OK")
 
 
-@router.get("/t/index/sp500", summary="S&P 500 현재가")
+@router.get("/index/sp500", summary="S&P 500 현재가")
 def proxy_sp500_price(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -220,7 +220,7 @@ def proxy_sp500_price(
     return create_response(data, message="OK")
 
 
-@router.get("/t/index/sp500/chart", summary="S&P 500 차트")
+@router.get("/index/sp500/chart", summary="S&P 500 차트")
 def proxy_sp500_chart(
     period: str = Query("1d", description="기간"),
     interval: str = Query("min:5", description="인터벌"),
@@ -239,7 +239,7 @@ def proxy_sp500_chart(
     return create_response(data, message="OK")
 
 
-@router.get("/t/index/kospi", summary="코스피 현재가")
+@router.get("/index/kospi", summary="코스피 현재가")
 def proxy_kospi_price(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -248,7 +248,7 @@ def proxy_kospi_price(
     return create_response(data, message="OK")
 
 
-@router.get("/t/index/kospi/chart", summary="코스피 차트")
+@router.get("/index/kospi/chart", summary="코스피 차트")
 def proxy_kospi_chart(
     period: str = Query("1d", description="기간"),
     interval: str = Query("min:5", description="인터벌"),
@@ -267,7 +267,7 @@ def proxy_kospi_chart(
     return create_response(data, message="OK")
 
 
-@router.get("/t/index/kosdaq", summary="코스닥 현재가")
+@router.get("/index/kosdaq", summary="코스닥 현재가")
 def proxy_kosdaq_price(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -276,7 +276,7 @@ def proxy_kosdaq_price(
     return create_response(data, message="OK")
 
 
-@router.get("/t/index/kosdaq/chart", summary="코스닥 차트")
+@router.get("/index/kosdaq/chart", summary="코스닥 차트")
 def proxy_kosdaq_chart(
     period: str = Query("1d", description="기간"),
     interval: str = Query("min:5", description="인터벌"),
@@ -295,7 +295,7 @@ def proxy_kosdaq_chart(
     return create_response(data, message="OK")
 
 
-@router.get("/t/index/vix", summary="VIX 현재가")
+@router.get("/index/vix", summary="VIX 현재가")
 def proxy_vix_price(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -304,7 +304,7 @@ def proxy_vix_price(
     return create_response(data, message="OK")
 
 
-@router.get("/t/index/vix/chart", summary="VIX 차트")
+@router.get("/index/vix/chart", summary="VIX 차트")
 def proxy_vix_chart(
     period: str = Query("1d", description="기간"),
     interval: str = Query("min:5", description="인터벌"),
@@ -325,7 +325,7 @@ def proxy_vix_chart(
 
 # ===== 환율 관련 API =====
 
-@router.get("/t/exchange-rate", summary="환율 정보")
+@router.get("/exchange-rate", summary="환율 정보")
 def proxy_exchange_rate(
     buyCurrency: str = Query("USD", description="매수 통화"),
     sellCurrency: str = Query("KRW", description="매도 통화"),
@@ -340,7 +340,7 @@ def proxy_exchange_rate(
     return create_response(data, message="OK")
 
 
-@router.get("/t/exchange-rate/chart", summary="환율 차트")
+@router.get("/exchange-rate/chart", summary="환율 차트")
 def proxy_exchange_rate_chart(
     period: str = Query("1d", description="기간"),
     interval: str = Query("min:5", description="인터벌"),
@@ -361,7 +361,7 @@ def proxy_exchange_rate_chart(
 
 # ===== 원자재 관련 API =====
 
-@router.get("/t/commodity/gold", summary="금 현재가")
+@router.get("/commodity/gold", summary="금 현재가")
 def proxy_gold_price(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -370,7 +370,7 @@ def proxy_gold_price(
     return create_response(data, message="OK")
 
 
-@router.get("/t/commodity/gold/chart", summary="금 차트")
+@router.get("/commodity/gold/chart", summary="금 차트")
 def proxy_gold_chart(
     period: str = Query("1d", description="기간"),
     interval: str = Query("min:5", description="인터벌"),
@@ -389,7 +389,7 @@ def proxy_gold_chart(
     return create_response(data, message="OK")
 
 
-@router.get("/t/commodity/silver", summary="은 현재가")
+@router.get("/commodity/silver", summary="은 현재가")
 def proxy_silver_price(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -398,7 +398,7 @@ def proxy_silver_price(
     return create_response(data, message="OK")
 
 
-@router.get("/t/commodity/silver/chart", summary="은 차트")
+@router.get("/commodity/silver/chart", summary="은 차트")
 def proxy_silver_chart(
     period: str = Query("1d", description="기간"),
     interval: str = Query("min:5", description="인터벌"),
@@ -417,7 +417,7 @@ def proxy_silver_chart(
     return create_response(data, message="OK")
 
 
-@router.get("/t/commodity/wti", summary="WTI 원유 현재가")
+@router.get("/commodity/wti", summary="WTI 원유 현재가")
 def proxy_wti_price(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -426,7 +426,7 @@ def proxy_wti_price(
     return create_response(data, message="OK")
 
 
-@router.get("/t/commodity/wti/chart", summary="WTI 원유 차트")
+@router.get("/commodity/wti/chart", summary="WTI 원유 차트")
 def proxy_wti_chart(
     period: str = Query("1d", description="기간"),
     interval: str = Query("min:5", description="인터벌"),
@@ -445,7 +445,7 @@ def proxy_wti_chart(
     return create_response(data, message="OK")
 
 
-@router.get("/t/commodity/copper", summary="구리 현재가")
+@router.get("/commodity/copper", summary="구리 현재가")
 def proxy_copper_price(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
@@ -454,7 +454,7 @@ def proxy_copper_price(
     return create_response(data, message="OK")
 
 
-@router.get("/t/commodity/copper/chart", summary="구리 차트")
+@router.get("/commodity/copper/chart", summary="구리 차트")
 def proxy_copper_chart(
     period: str = Query("1d", description="기간"),
     interval: str = Query("min:5", description="인터벌"),
@@ -475,7 +475,7 @@ def proxy_copper_chart(
 
 # ===== 검색 관련 API =====
 
-@router.post("/t/search/auto-complete", summary="검색 자동완성")
+@router.post("/search/auto-complete", summary="검색 자동완성")
 def proxy_search_auto_complete(
     query: str = Body(..., description="검색어"),
     sections: Optional[list] = Body(
@@ -500,7 +500,7 @@ def proxy_search_auto_complete(
 
 # ===== 종목 관련 API =====
 
-@router.get("/t/stock-infos/{productCode}", summary="종목 기본정보")
+@router.get("/stock-infos/{productCode}", summary="종목 기본정보")
 def proxy_stock_info(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -511,7 +511,7 @@ def proxy_stock_info(
     return create_response(data, message="OK")
 
 
-@router.get("/t/news/companies/{companyCode}", summary="종목 뉴스")
+@router.get("/news/companies/{companyCode}", summary="종목 뉴스")
 def proxy_stock_news(
     companyCode: str,
     size: int = Query(20, ge=1, le=100),
@@ -524,7 +524,7 @@ def proxy_stock_news(
     return create_response(data, message="OK")
 
 
-@router.get("/t/dart-reports/companies/wts/{companyCode}", summary="종목 공시")
+@router.get("/dart-reports/companies/wts/{companyCode}", summary="종목 공시")
 def proxy_dart_reports(
     companyCode: str,
     size: int = Query(20, ge=1, le=100),
@@ -536,7 +536,7 @@ def proxy_dart_reports(
     return create_response(data, message="OK")
 
 
-@router.get("/t/stock-prices/details", summary="종목 거래 현황")
+@router.get("/stock-prices/details", summary="종목 거래 현황")
 def proxy_price_details(
     productCode: str = Query(..., description="종목 코드"),
     current_user_id: str = Depends(get_current_user),
@@ -553,7 +553,7 @@ def proxy_price_details(
     return create_response(data, message="OK")
 
 
-@router.get("/t/mds/broker/trading-ranking", summary="종목 매수/매도 상위 (미장은 정보 없음)")
+@router.get("/mds/broker/trading-ranking", summary="종목 매수/매도 상위 (미장은 정보 없음)")
 def proxy_top_broker(
     productCode: str = Query(..., description="종목 코드"),
     current_user_id: str = Depends(get_current_user),
@@ -564,7 +564,7 @@ def proxy_top_broker(
     return create_response(data, message="OK")
 
 
-@router.get("/t/stock-infos/trade/trend/trading-trend", summary="투자자별 매매 동향 (미장은 정보 없음)")
+@router.get("/stock-infos/trade/trend/trading-trend", summary="투자자별 매매 동향 (미장은 정보 없음)")
 def proxy_trade_trend(
     productCode: str = Query(..., description="종목 코드", alias="productCode"),
     size: int = Query(50, ge=1, le=200),
@@ -578,7 +578,7 @@ def proxy_trade_trend(
 
 # ===== 종목 상세 - 주요정보 관련 API =====
 
-@router.get("/t/stock-infos/{productCode}/overview", summary="종목 - 주요정보")
+@router.get("/stock-infos/{productCode}/overview", summary="종목 - 주요정보")
 def proxy_stock_overview(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -588,7 +588,7 @@ def proxy_stock_overview(
     return create_response(data, message="OK")
 
 
-@router.get("/t/companies/{companyCode}/sales-compositions", summary="종목 - 매출·산업 구성")
+@router.get("/companies/{companyCode}/sales-compositions", summary="종목 - 매출·산업 구성")
 def proxy_stock_sales_compositions(
     companyCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -597,7 +597,7 @@ def proxy_stock_sales_compositions(
     data = toss_proxy_service.proxy_get(f"/api/v1/companies/{companyCode}/sales-compositions")
     return create_response(data, message="OK")
 
-@router.get("/t/companies/{companyCode}/tics", summary="종목 - 주요 산업")
+@router.get("/companies/{companyCode}/tics", summary="종목 - 주요 산업")
 def proxy_stock_tics(
     companyCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -606,7 +606,7 @@ def proxy_stock_tics(
     data = toss_proxy_service.proxy_get(f"/api/v2/companies/{companyCode}/tics")
     return create_response(data, message="OK")
 
-@router.get("/t/stock-detail/ui/wts/{productCode}/investment-indicators", summary="종목 - 투자 지표")
+@router.get("/stock-detail/ui/wts/{productCode}/investment-indicators", summary="종목 - 투자 지표")
 def proxy_stock_investment_indicators(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -616,7 +616,7 @@ def proxy_stock_investment_indicators(
     return create_response(data, message="OK")
 
 
-@router.get("/t/stock-infos/operating-income/{productCode}", summary="종목 - 수익성")
+@router.get("/stock-infos/operating-income/{productCode}", summary="종목 - 수익성")
 def proxy_stock_operating_income(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -626,7 +626,7 @@ def proxy_stock_operating_income(
     return create_response(data, message="OK")
 
 
-@router.get("/t/stock-infos/stability/{productCode}", summary="종목 - 안정성")
+@router.get("/stock-infos/stability/{productCode}", summary="종목 - 안정성")
 def proxy_stock_stability(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -636,7 +636,7 @@ def proxy_stock_stability(
     return create_response(data, message="OK")
 
 
-@router.get("/t/stock-infos/revenue-and-net-profit/{productCode}", summary="종목 - 영업이익 성장률")
+@router.get("/stock-infos/revenue-and-net-profit/{productCode}", summary="종목 - 영업이익 성장률")
 def proxy_stock_revenue_and_net_profit(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -646,7 +646,7 @@ def proxy_stock_revenue_and_net_profit(
     return create_response(data, message="OK")
 
 
-@router.get("/t/companies/{productCode}/financial-statement-records", summary="종목 - 손익계산서")
+@router.get("/companies/{productCode}/financial-statement-records", summary="종목 - 손익계산서")
 def proxy_stock_income_statement(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -655,7 +655,7 @@ def proxy_stock_income_statement(
     data = toss_proxy_service.proxy_post(f"/api/v2/companies/{productCode}/financial-statement-records", body={}, base_url=toss_proxy_service.INFO_BASE_URL)
     return create_response(data, message="OK")
 
-@router.post("/t/companies/{productCode}/financial-statements/comprehensive", summary="종목 - 재무상태표")
+@router.post("/companies/{productCode}/financial-statements/comprehensive", summary="종목 - 재무상태표")
 def proxy_stock_balance_sheet(
     productCode: str,
     body: Optional[Dict] = Body(None),
@@ -666,7 +666,7 @@ def proxy_stock_balance_sheet(
     return create_response(data, message="OK")
 
 
-@router.get("/t/companies/{productCode}/financial/estimate/revenue", summary="종목 - 실적")
+@router.get("/companies/{productCode}/financial/estimate/revenue", summary="종목 - 실적")
 def proxy_stock_estimate_revenue(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -678,7 +678,7 @@ def proxy_stock_estimate_revenue(
 
 # ===== 종목 상세 - 애널리스트 분석 관련 API =====
 
-@router.get("/t/stock-detail/ui/wts/{productCode}/analyst-reports", summary="종목 - 애널리스트 분석")
+@router.get("/stock-detail/ui/wts/{productCode}/analyst-reports", summary="종목 - 애널리스트 분석")
 def proxy_stock_analyst_reports(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -688,7 +688,7 @@ def proxy_stock_analyst_reports(
     return create_response(data, message="OK")
 
 
-@router.get("/t/stock-detail/ui/wts/{productCode}/analyst-opinion", summary="종목 - 애널리스트 의견")
+@router.get("/stock-detail/ui/wts/{productCode}/analyst-opinion", summary="종목 - 애널리스트 의견")
 def proxy_stock_analyst_opinion(
     productCode: str,
     current_user_id: str = Depends(get_current_user),
@@ -698,7 +698,7 @@ def proxy_stock_analyst_opinion(
     return create_response(data, message="OK")
 
 
-@router.get("/t/stock-infos/evaluation-comparison/{productCode}", summary="종목 - 투자 지표(PER...)")
+@router.get("/stock-infos/evaluation-comparison/{productCode}", summary="종목 - 투자 지표(PER...)")
 def proxy_stock_evaluation_comparison(
     productCode: str,
     current_user_id: str = Depends(get_current_user),

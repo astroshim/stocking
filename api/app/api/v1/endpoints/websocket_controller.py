@@ -20,7 +20,11 @@ async def get_daemon_health(
     current_user_id: str = Depends(get_current_user),
     redis_service: RedisService = Depends(get_redis_service)
 ) -> Dict[str, Any]:
-    """WebSocket 데몬의 상태를 확인합니다"""
+    """WebSocket 데몬의 상태를 확인합니다
+    
+       - 30초 이상 업데이트 없으면 stale
+       - 1분 이상 업데이트 없으면 dead로 간주
+    """
     
     health_data = await redis_service.get_websocket_daemon_health()
     
@@ -119,3 +123,44 @@ async def remove_dynamic_subscription(
             },
             message="구독 해제 실패"
         )
+
+
+@router.post("/websocket/reconnect")
+async def reconnect_websocket(
+    current_user_id: str = Depends(get_current_user),
+    redis_service: RedisService = Depends(get_redis_service)
+):
+    """
+    WebSocket 재연결
+    
+    Toss WebSocket 서버와의 연결이 끊어진 경우 재연결을 시도합니다.
+    기존 구독 목록은 자동으로 복원됩니다.
+    """
+    try:
+        logger.info("🔄 WebSocket reconnection API called")
+        
+        command_service = await get_websocket_command_service(redis_service.redis_client)
+        result = await command_service.send_reconnect_command()
+        
+        if result.get('success'):
+            return create_response(data={
+                "success": True,
+                "message": "WebSocket 재연결 성공",
+                "connection_status": result.get('connection_status', {}),
+                "command_id": result.get('command_id')
+            })
+        else:
+            return create_response(data={
+                "success": False,
+                "message": result.get('message', 'WebSocket 재연결 실패'),
+                "connection_status": result.get('connection_status', {}),
+                "command_id": result.get('command_id')
+            }, code=500)
+            
+    except Exception as e:
+        logger.error(f"❌ WebSocket reconnection API error: {e}")
+        return create_response(data={
+            "success": False,
+            "message": "재연결 요청 실패",
+            "error": str(e)
+        }, code=500)

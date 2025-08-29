@@ -144,6 +144,42 @@ class WebSocketCommandService:
             'message': f'Command timeout after {timeout} seconds',
             'timeout': True
         }
+    
+    async def send_reconnect_command(self) -> Dict[str, Any]:
+        """WebSocket 재연결 명령 전송"""
+        try:
+            command_id = str(uuid.uuid4())
+            command_data = {
+                'type': 'reconnect',
+                'command_id': command_id,
+                'timestamp': time.time()
+            }
+            
+            self.logger.info(f"🔄 Sending reconnect command: {command_id}")
+            
+            # Redis Pub/Sub으로 명령 전송
+            await self.redis_client.publish(
+                'websocket_daemon:commands',
+                json.dumps(command_data)
+            )
+            
+            # 결과 대기 (폴링)
+            result = await self._wait_for_result(command_id, timeout=45)  # 재연결은 시간이 더 오래 걸릴 수 있음
+            
+            if result:
+                self.logger.info(f"✅ Reconnect command completed: {result.get('success')}")
+                return result
+            else:
+                self.logger.error("❌ Reconnect command timeout")
+                return {
+                    'success': False,
+                    'message': 'Reconnection command timeout',
+                    'command_id': command_id
+                }
+                
+        except Exception as e:
+            self.logger.error(f"❌ Send reconnect command failed: {e}")
+            raise Exception(f"Failed to send reconnect command: {str(e)}")
 
 
 async def get_websocket_command_service(redis_client: redis.Redis) -> WebSocketCommandService:
