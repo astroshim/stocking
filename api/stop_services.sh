@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 서비스 중지 스크립트
-# WebSocket 데몬과 FastAPI 서버를 안전하게 종료
+# Toss WebSocket 릴레이어와 FastAPI 서버를 안전하게 종료
 
 set -e  # 에러 발생시 스크립트 중단
 
@@ -73,10 +73,10 @@ stop_from_pidfile() {
 main() {
     echo "📋 Checking running services..."
     
-    # 1. WebSocket 데몬 중지
+    # 1. Toss WebSocket 릴레이어 중지
     echo ""
-    echo "🔌 Stopping WebSocket Daemon..."
-    stop_from_pidfile "/tmp/websocket_daemon.pid" "websocket_daemon"
+    echo "🔌 Stopping Toss WebSocket Relayer..."
+    stop_from_pidfile "/tmp/toss_ws_relayer.pid" "toss_ws_relayer"
     
     # 2. FastAPI 서버 중지
     echo ""
@@ -88,7 +88,7 @@ main() {
     echo "🧹 Cleaning up..."
     
     # 남은 Python 프로세스 중 관련된 것들 정리
-    local remaining_pids=$(ps aux | grep -E "(websocket_daemon\.py|main:app)" | grep -v grep | awk '{print $2}' || true)
+    local remaining_pids=$(ps aux | grep -E "(toss_ws_relayer\.py|main:app)" | grep -v grep | awk '{print $2}' || true)
     if [ -n "$remaining_pids" ]; then
         echo "🔍 Found remaining processes: $remaining_pids"
         for pid in $remaining_pids; do
@@ -97,7 +97,7 @@ main() {
     fi
     
     # PID 파일들 정리
-    rm -f /tmp/websocket_daemon.pid /tmp/fastapi.pid
+    rm -f /tmp/toss_ws_relayer.pid /tmp/fastapi.pid
     
     # 4. Redis 상태 확인 (선택적)
     if command -v redis-cli >/dev/null 2>&1; then
@@ -115,7 +115,7 @@ main() {
     echo "✅ All services stopped successfully!"
     echo ""
     echo "🔗 Useful commands:"
-    echo "  - Check processes: ps aux | grep -E '(websocket_daemon|gunicorn|uvicorn)'"
+    echo "  - Check processes: ps aux | grep -E '(toss_ws_relayer|gunicorn|uvicorn)'"
     echo "  - Check Redis: redis-cli ping"
     echo "  - Check ports: lsof -i :8000"
 }

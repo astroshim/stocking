@@ -128,7 +128,7 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-@router.websocket("/ws")
+@router.websocket("/kis-ws")
 async def websocket_endpoint(websocket: WebSocket):
     # 파라미터 수신
     stock_id = websocket.query_params.get("stock_id")

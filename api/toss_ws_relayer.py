@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-독립 WebSocket 데몬 프로세스
+독립 WebSocket 릴레이어 프로세스
 
 Gunicorn worker와 별개로 실행되는 WebSocket 서비스
 실시간 데이터를 Redis를 통해 FastAPI 애플리케이션과 공유
@@ -22,14 +22,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from app.services.toss_websocket_service import TossWebSocketService
 
 
-class WebSocketDaemon:
-    """독립 WebSocket 데몬"""
+class TossWsRelayer:
+    """독립 WebSocket 릴레이어"""
     
     def __init__(self):
         self.running = False
         self.websocket_service = TossWebSocketService()
         self.redis_client: redis.Redis = None
-        self.start_time = time.time()  # 데몬 시작 시간
+        self.start_time = time.time()  # 릴레이어 시작 시간
         
         # 로깅 설정
         logging.basicConfig(
@@ -37,7 +37,7 @@ class WebSocketDaemon:
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.StreamHandler(sys.stdout),
-                logging.FileHandler('/tmp/websocket_daemon.log')
+                logging.FileHandler('/tmp/toss_ws_relayer.log')
             ]
         )
         self.logger = logging.getLogger(__name__)
@@ -57,9 +57,9 @@ class WebSocketDaemon:
         self.running = False
     
     async def start(self):
-        """데몬 시작"""
+        """릴레이어 시작"""
         try:
-            self.logger.info("🚀 Starting WebSocket Daemon...")
+            self.logger.info("🚀 Starting Toss WebSocket Relayer...")
             self.running = True
             
             # Redis 연결
@@ -70,7 +70,7 @@ class WebSocketDaemon:
             
             # WebSocket 서비스 시작
             if await self.websocket_service.start():
-                self.logger.info("✅ WebSocket Daemon started successfully")
+                self.logger.info("✅ Toss WebSocket Relayer started successfully")
                 
                 # 명령 채널 리스너 시작
                 command_task = asyncio.create_task(self._listen_for_commands())
@@ -85,14 +85,14 @@ class WebSocketDaemon:
                 self.logger.error("❌ Failed to start WebSocket service")
                 
         except Exception as e:
-            self.logger.error(f"❌ Daemon startup error: {e}")
+            self.logger.error(f"❌ Relayer startup error: {e}")
         finally:
             await self.stop()
     
     async def stop(self):
-        """데몬 중지"""
+        """릴레이어 중지"""
         try:
-            self.logger.info("🛑 Stopping WebSocket Daemon...")
+            self.logger.info("🛑 Stopping Toss WebSocket Relayer...")
             self.running = False
             
             # WebSocket 서비스 중지
@@ -103,10 +103,10 @@ class WebSocketDaemon:
             if self.redis_client:
                 await self.redis_client.close()
             
-            self.logger.info("✅ WebSocket Daemon stopped")
+            self.logger.info("✅ Toss WebSocket Relayer stopped")
             
         except Exception as e:
-            self.logger.error(f"❌ Daemon shutdown error: {e}")
+            self.logger.error(f"❌ Relayer shutdown error: {e}")
     
     async def _connect_redis(self):
         """Redis 연결"""
@@ -202,7 +202,7 @@ class WebSocketDaemon:
             self.logger.info("🎧 Starting command listener...")
             
             pubsub = self.redis_client.pubsub()
-            await pubsub.subscribe('websocket_daemon:commands')
+            await pubsub.subscribe('toss_ws_relayer:commands')
             
             async for message in pubsub.listen():
                 if message['type'] == 'message':
@@ -280,7 +280,7 @@ class WebSocketDaemon:
             
             # 결과를 Redis에 저장
             await self.redis_client.setex(
-                f'websocket_daemon:command_result:{command_id}',
+                f'toss_ws_relayer:command_result:{command_id}',
                 60,  # 1분 TTL
                 json.dumps(result)
             )
@@ -339,7 +339,7 @@ class WebSocketDaemon:
             
             # 결과를 Redis에 저장
             await self.redis_client.setex(
-                f'websocket_daemon:command_result:{command_id}',
+                f'toss_ws_relayer:command_result:{command_id}',
                 60,  # 1분 TTL
                 json.dumps(result)
             )
@@ -362,7 +362,7 @@ class WebSocketDaemon:
             
             # 결과를 Redis에 저장
             await self.redis_client.setex(
-                f'websocket_daemon:command_result:{command_id}',
+                f'toss_ws_relayer:command_result:{command_id}',
                 60,  # 1분 TTL
                 json.dumps(result)
             )
@@ -408,7 +408,7 @@ class WebSocketDaemon:
             
             # 결과를 Redis에 저장
             await self.redis_client.setex(
-                f'websocket_daemon:command_result:{command_id}',
+                f'toss_ws_relayer:command_result:{command_id}',
                 60,  # 1분 TTL
                 json.dumps(result_data)
             )
@@ -432,7 +432,7 @@ class WebSocketDaemon:
                         }
                     }
                     await self.redis_client.setex(
-                        f'websocket_daemon:command_result:{command_id}',
+                        f'toss_ws_relayer:command_result:{command_id}',
                         60,
                         json.dumps(error_result)
                     )
@@ -459,7 +459,7 @@ class WebSocketDaemon:
             }
             
             await self.redis_client.setex(
-                'websocket_daemon:health',
+                'toss_ws_relayer:health',
                 300,  # 5분 TTL (30초 × 10회 여유)
                 json.dumps(health_data)
             )
@@ -473,7 +473,7 @@ class WebSocketDaemon:
                 self.logger.info("🔄 Retrying health status update...")
                 await asyncio.sleep(2)  # 2초 대기 후 재시도
                 await self.redis_client.setex(
-                    'websocket_daemon:health',
+                    'toss_ws_relayer:health',
                     300,  # 5분 TTL
                     json.dumps(health_data)
                 )
@@ -513,18 +513,18 @@ class WebSocketDaemon:
 
 async def main():
     """메인 함수"""
-    daemon = WebSocketDaemon()
+    relayer = TossWsRelayer()
     
     try:
-        await daemon.start()
+        await relayer.start()
     except KeyboardInterrupt:
-        daemon.logger.info("🛑 Received KeyboardInterrupt")
+        relayer.logger.info("🛑 Received KeyboardInterrupt")
     except Exception as e:
-        daemon.logger.error(f"❌ Daemon error: {e}")
+        relayer.logger.error(f"❌ Relayer error: {e}")
     finally:
-        await daemon.stop()
+        await relayer.stop()
 
 
 if __name__ == "__main__":
-    print("🚀 Starting WebSocket Daemon Process...")
+    print("🚀 Starting Toss WebSocket Relayer Process...")
     asyncio.run(main())

@@ -67,7 +67,7 @@ graph TD
 
 ### 핵심 컴포넌트
 
-#### 1. **WebSocket Daemon** (`websocket_daemon.py`)
+#### 1. **Toss WebSocket Relayer** (`toss_ws_relayer.py`)
 - Gunicorn worker와 **완전히 독립된 프로세스**
 - Toss Securities WebSocket 연결 관리
 - 실시간 주가 데이터 수신 및 Redis 저장
@@ -212,7 +212,7 @@ GET /api/v1/admin/websocket/subscriptions
 - `POST /api/v1/admin/websocket/subscriptions/subscribe?topic=A000660`
 
 **2단계**: Redis Pub/Sub으로 명령 전송
-- 채널: `websocket_daemon:commands`
+- 채널: `toss_ws_relayer:commands`
 - 데이터: `{"type": "subscribe", "topic": "A000660", "command_id": "uuid"}`
 
 **3단계**: 데몬이 명령 수신 및 처리
@@ -222,7 +222,7 @@ GET /api/v1/admin/websocket/subscriptions
 - STOMP `SUBSCRIBE` 프레임을 Toss로 전송
 
 **5단계**: 결과를 Redis에 저장
-- 키: `websocket_daemon:command_result:{command_id}`
+- 키: `toss_ws_relayer:command_result:{command_id}`
 - 값: `{"success": true, "message": "Successfully subscribed"}`
 
 **6단계**: API가 결과 폴링 (최대 30초)
@@ -403,7 +403,7 @@ redis-server --daemonize yes
 redis-server --daemonize yes
 
 # WebSocket 데몬 시작 (터미널 1)
-python3 websocket_daemon.py
+python3 toss_ws_relayer.py
 
 # FastAPI 서버 시작 (터미널 2)
 uv run uvicorn main:app --host 0.0.0.0 --port 8000 --reload
@@ -548,7 +548,7 @@ app/
 └── exceptions/         # 커스텀 예외
 
 # 루트 레벨 파일
-websocket_daemon.py             # 독립 WebSocket 데몬 프로세스
+toss_ws_relayer.py              # 독립 Toss WebSocket 릴레이어 프로세스
 start_services.sh               # 통합 서비스 실행 스크립트
 docker-compose.yml              # Docker Compose 설정
 test_dynamic_subscription.py    # 동적 구독 테스트 스크립트
@@ -636,14 +636,14 @@ async function onPayClick() {
 ### 주요 배포 파일
 - `start_services.sh`: 통합 서비스 실행 스크립트
 - `docker-compose.yml`: Redis + API 서비스 구성
-- `websocket_daemon.py`: 독립 WebSocket 데몬
+- `toss_ws_relayer.py`: 독립 Toss WebSocket 릴레이어
 - `Dockerfile`: API 서버 컨테이너 이미지
 - `gunicorn.conf.py`: Gunicorn 설정
 
 ### 서비스 상태 확인
 ```bash
 # 프로세스 확인
-ps aux | grep websocket_daemon
+ps aux | grep toss_ws_relayer
 ps aux | grep gunicorn
 
 # Redis 연결 확인

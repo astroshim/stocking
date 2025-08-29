@@ -13,11 +13,11 @@ from app.services.redis_service import get_redis_service, RedisService
 from app.services.websocket_command_service import get_websocket_command_service, WebSocketCommandService
 from app.utils.response_helper import create_response
 
-router = APIRouter(tags=["WebSocket"])
+router = APIRouter(tags=["TossWebSocketRelayer"])
 logger = logging.getLogger(__name__)
 
 
-@router.get("/websocket/daemon/health", summary="WebSocket 데몬 상태 확인")
+@router.get("/toss-ws-relayer/daemon/health", summary="WebSocket 데몬 상태 확인")
 async def get_daemon_health(
     current_user_id: str = Depends(get_current_user),
     redis_service: RedisService = Depends(get_redis_service)
@@ -28,7 +28,7 @@ async def get_daemon_health(
        - 1분 이상 업데이트 없으면 dead로 간주
     """
     
-    health_data = await redis_service.get_websocket_daemon_health()
+    health_data = await redis_service.get_toss_ws_relayer_health()
     
     if health_data:
         return create_response(health_data, message="WebSocket 데몬 상태 조회 성공")
@@ -39,7 +39,7 @@ async def get_daemon_health(
         )
 
 
-@router.get("/websocket/subscriptions", summary="구독 목록 조회")
+@router.get("/toss-ws-relayer/subscriptions", summary="구독 목록 조회")
 async def get_subscriptions(
     current_user_id: str = Depends(get_current_user),
     redis_service: RedisService = Depends(get_redis_service)
@@ -65,7 +65,7 @@ async def get_subscriptions(
         )
 
 
-@router.post("/websocket/subscriptions/subscribe", summary="동적 구독 추가")
+@router.post("/toss-ws-relayer/subscriptions/subscribe", summary="동적 구독 추가")
 async def add_dynamic_subscription(
     topic: str = Query(description="구독할 토픽 (예: /topic/v1/kr/stock/trade/A005930)"),
     current_user_id: str = Depends(get_current_user),
@@ -96,7 +96,7 @@ async def add_dynamic_subscription(
         )
 
 
-@router.delete("/websocket/subscriptions/unsubscribe", summary="동적 구독 해제")
+@router.delete("/toss-ws-relayer/subscriptions/unsubscribe", summary="동적 구독 해제")
 async def remove_dynamic_subscription(
     topic: str = Query(description="구독해제할 토픽"),
     current_user_id: str = Depends(get_current_user),
@@ -127,7 +127,7 @@ async def remove_dynamic_subscription(
         )
 
 
-@router.post("/websocket/reconnect")
+@router.post("/toss-ws-relayer/reconnect")
 async def reconnect_websocket(
     current_user_id: str = Depends(get_current_user),
     redis_service: RedisService = Depends(get_redis_service)

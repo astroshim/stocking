@@ -1,7 +1,7 @@
 """
 WebSocket 명령 서비스
 
-WebSocket 데몬에 동적으로 구독/구독해제 명령을 전송하는 서비스
+Toss WebSocket 릴레이어에 동적으로 구독/구독해제 명령을 전송하는 서비스
 """
 import json
 import time
@@ -14,7 +14,7 @@ import redis.asyncio as redis
 
 
 class WebSocketCommandService:
-    """WebSocket 데몬 명령 서비스"""
+    """Toss WebSocket 릴레이어 명령 서비스"""
     
     def __init__(self, redis_client: redis.Redis):
         self.redis_client = redis_client
@@ -34,7 +34,7 @@ class WebSocketCommandService:
         try:
             # 명령 전송
             await self.redis_client.publish(
-                'websocket_daemon:commands',
+                'toss_ws_relayer:commands',
                 json.dumps(command_data)
             )
             
@@ -67,7 +67,7 @@ class WebSocketCommandService:
         try:
             # 명령 전송
             await self.redis_client.publish(
-                'websocket_daemon:commands',
+                'toss_ws_relayer:commands',
                 json.dumps(command_data)
             )
             
@@ -99,7 +99,7 @@ class WebSocketCommandService:
         try:
             # 명령 전송
             await self.redis_client.publish(
-                'websocket_daemon:commands',
+                'toss_ws_relayer:commands',
                 json.dumps(command_data)
             )
             
@@ -120,7 +120,7 @@ class WebSocketCommandService:
     
     async def _wait_for_result(self, command_id: str, timeout: int) -> Dict[str, Any]:
         """명령 결과 대기"""
-        result_key = f'websocket_daemon:command_result:{command_id}'
+        result_key = f'toss_ws_relayer:command_result:{command_id}'
         
         # 폴링으로 결과 대기 (0.5초마다 확인)
         for attempt in range(timeout * 2):  # 0.5초 * timeout * 2
@@ -160,7 +160,7 @@ class WebSocketCommandService:
             
             # Redis Pub/Sub으로 명령 전송
             await self.redis_client.publish(
-                'websocket_daemon:commands',
+                'toss_ws_relayer:commands',
                 json.dumps(command_data)
             )
             

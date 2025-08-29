@@ -128,7 +128,7 @@ async def get_daemon_health(
 ) -> Dict[str, Any]:
     """WebSocket 데몬의 상태를 확인합니다"""
     
-    health_data = await redis_service.get_websocket_daemon_health()
+    health_data = await redis_service.get_toss_ws_relayer_health()
     
     if health_data:
         return create_response(health_data, message="WebSocket 데몬 상태 조회 성공")

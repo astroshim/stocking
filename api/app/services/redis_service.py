@@ -102,13 +102,13 @@ class RedisService:
             self.logger.error(f"❌ Failed to get multiple realtime data: {e}")
             return {}
     
-    async def get_websocket_daemon_health(self) -> Optional[Dict[str, Any]]:
-        """WebSocket 데몬 헬스체크 정보 조회 (실시간 상태 분석 포함)"""
+    async def get_toss_ws_relayer_health(self) -> Optional[Dict[str, Any]]:
+        """Toss WebSocket 릴레이어 헬스체크 정보 조회 (실시간 상태 분석 포함)"""
         try:
             if not self.redis_client:
                 await self.connect()
             
-            health_data = await self.redis_client.get('websocket_daemon:health')
+            health_data = await self.redis_client.get('toss_ws_relayer:health')
             
             if health_data:
                 parsed_data = json.loads(health_data)

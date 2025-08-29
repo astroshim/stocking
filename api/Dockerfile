@@ -51,6 +51,9 @@ COPY main.py ./
 COPY app/ ./app/
 COPY gunicorn.conf.py ./
 COPY pyproject.toml uv.lock ./
+COPY toss_ws_relayer.py ./
+COPY start_services.sh ./
+COPY stop_services.sh ./
 # COPY .env.${ENV} .env
 # .env.production은 런타임에 외부에서 주입 (보안상 권장)
 
@@ -58,7 +61,7 @@ COPY pyproject.toml uv.lock ./
 EXPOSE 8000
 
 # 스크립트 실행 권한 부여
-RUN chmod +x start_services.sh websocket_daemon.py
+RUN chmod +x start_services.sh toss_ws_relayer.py
 
 # 애플리케이션 실행 (통합 서비스 스크립트 사용)
 CMD ["./start_services.sh"]
