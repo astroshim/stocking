@@ -4,8 +4,8 @@ import websockets
 
 
 async def main(host: str, port: int, path: str, stock_id: str, count: int, user_id: str):
-    # uri = f"ws://{host}:{port}{path}?stock_id={stock_id}&user_id={user_id}"
-    uri = f"wss://{host}{path}?stock_id={stock_id}&user_id={user_id}"
+    uri = f"ws://{host}:{port}{path}?stock_id={stock_id}&user_id={user_id}"
+    # uri = f"wss://{host}{path}?stock_id={stock_id}&user_id={user_id}"
     print(f"Connecting to: {uri}")
     async with websockets.connect(uri) as websocket:
         print(f"Connected to: {uri}")
@@ -16,8 +16,10 @@ async def main(host: str, port: int, path: str, stock_id: str, count: int, user_
             received += 1
 
 
-# 국내: uv run tests/ws_client.py --stock-id 035900 --count 5
-# 해외: uv run tests/ws_client.py --stock-id RBAQAAPL --count 5
+# kis 국내: uv run tests/ws_client.py --stock-id 035900 --count 5
+# kis 해외: uv run tests/ws_client.py --stock-id RBAQAAPL --count 5
+
+# toss uv run tests/ws_client.py --path /api/v1/trading/toss-ws --stock-id US20220809012  --count 10
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simple WS test client for stock price stream")

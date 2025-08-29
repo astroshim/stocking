@@ -10,7 +10,7 @@ from typing import Dict, Any, List
 
 from app.config.get_current_user import get_current_user
 from app.services.redis_service import get_redis_service, RedisService
-from app.services.websocket_command_service import get_websocket_command_service, WebSocketCommandService
+from app.services.toss_websocket_command_service import get_toss_websocket_command_service, TossWebSocketCommandService
 from app.utils.response_helper import create_response
 
 router = APIRouter(tags=["TossWebSocketRelayer"])
@@ -46,7 +46,7 @@ async def get_subscriptions(
 ) -> Dict[str, Any]:
     """현재 구독 중인 토픽 목록을 조회합니다 (WebSocket 데몬으로부터)"""
     
-    command_service = await get_websocket_command_service(redis_service.redis_client)
+    command_service = await get_toss_websocket_command_service(redis_service.redis_client)
     result = await command_service.get_subscriptions()
     
     if result.get('success'):
@@ -73,7 +73,7 @@ async def add_dynamic_subscription(
 ) -> Dict[str, Any]:
     """WebSocket 데몬에 새로운 토픽 구독을 동적으로 추가합니다"""
     
-    command_service = await get_websocket_command_service(redis_service.redis_client)
+    command_service = await get_toss_websocket_command_service(redis_service.redis_client)
     result = await command_service.send_subscribe_command(topic)
     
     if result.get('success'):
@@ -104,7 +104,7 @@ async def remove_dynamic_subscription(
 ) -> Dict[str, Any]:
     """WebSocket 데몬에서 토픽 구독을 동적으로 해제합니다"""
     
-    command_service = await get_websocket_command_service(redis_service.redis_client)
+    command_service = await get_toss_websocket_command_service(redis_service.redis_client)
     result = await command_service.send_unsubscribe_command(topic)
     
     if result.get('success'):
@@ -141,7 +141,7 @@ async def reconnect_websocket(
     try:
         logger.info("🔄 WebSocket reconnection API called")
         
-        command_service = await get_websocket_command_service(redis_service.redis_client)
+        command_service = await get_toss_websocket_command_service(redis_service.redis_client)
         result = await command_service.send_reconnect_command()
         
         if result.get('success'):

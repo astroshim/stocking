@@ -10,7 +10,7 @@ from app.config.get_current_user import get_current_user
 from app.services.redis_service import get_redis_service, RedisService
 from app.utils.response_helper import create_response
 
-router = APIRouter(tags=["실시간 데이터"])
+router = APIRouter(tags=["Toss Relayer Redis 실시간 데이터"])
 
 
 @router.get("/realtime/stock/{stock_code}", summary="실시간 주가 조회")
@@ -121,19 +121,19 @@ async def get_all_realtime_stocks(
         )
 
 
-@router.get("/realtime/daemon/health", summary="WebSocket 데몬 상태 확인")
-async def get_daemon_health(
-    current_user_id: str = Depends(get_current_user),
-    redis_service: RedisService = Depends(get_redis_service)
-) -> Dict[str, Any]:
-    """WebSocket 데몬의 상태를 확인합니다"""
+# @router.get("/realtime/daemon/health", summary="WebSocket 데몬 상태 확인")
+# async def get_daemon_health(
+#     current_user_id: str = Depends(get_current_user),
+#     redis_service: RedisService = Depends(get_redis_service)
+# ) -> Dict[str, Any]:
+#     """WebSocket 데몬의 상태를 확인합니다"""
     
-    health_data = await redis_service.get_toss_ws_relayer_health()
+#     health_data = await redis_service.get_toss_ws_relayer_health()
     
-    if health_data:
-        return create_response(health_data, message="WebSocket 데몬 상태 조회 성공")
-    else:
-        return create_response(
-            {"status": "offline", "message": "WebSocket 데몬이 실행되지 않고 있습니다"},
-            message="WebSocket 데몬 오프라인"
-        )
+#     if health_data:
+#         return create_response(health_data, message="WebSocket 데몬 상태 조회 성공")
+#     else:
+#         return create_response(
+#             {"status": "offline", "message": "WebSocket 데몬이 실행되지 않고 있습니다"},
+#             message="WebSocket 데몬 오프라인"
+#         )

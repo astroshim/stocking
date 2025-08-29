@@ -119,6 +119,182 @@ GET /api/v1/trading/realtime/stocks/all
 GET /api/v1/trading/realtime/daemon/health
 ```
 
+## 🔌 실시간 WebSocket API
+
+### Toss WebSocket Controller
+
+클라이언트가 WebSocket을 통해 실시간 주식 데이터를 받을 수 있는 전용 컨트롤러입니다. `TossWsRelayer`가 Redis에 저장한 데이터를 WebSocket으로 전달합니다.
+
+#### WebSocket 연결
+
+```bash
+# 기본 연결 (에코 모드)
+ws://localhost:8000/api/v1/trading/toss-ws
+
+# 주식 실시간 데이터 구독
+ws://localhost:8000/api/v1/trading/toss-ws?stock_code=A005930&user_id=1
+```
+
+#### 데이터 흐름 아키텍처
+
+```mermaid
+graph TD
+    A[클라이언트] -->|WebSocket 연결| B[TossConnectionManager]
+    B -->|구독 요청| C[TossWsRelayer]
+    C -->|Redis 저장| D[Redis]
+    D -->|Pub/Sub 알림| E[Redis Listener]
+    E -->|실시간 전송| A
+    
+    F[Toss WebSocket] -->|실시간 데이터| C
+    C -->|데이터 저장| D
+    
+    style A fill:#e3f2fd
+    style B fill:#fff3e0
+    style C fill:#c8e6c9
+    style D fill:#ffebee
+    style E fill:#f3e5f5
+```
+
+#### 메시지 타입
+
+**1. 연결 성공**
+```json
+{
+  "type": "connection_success",
+  "stock_code": "A005930",
+  "message": "Toss 실시간 데이터 구독이 시작되었습니다.",
+  "client_id": "12345"
+}
+```
+
+**2. 기존 데이터 (즉시 전송)**
+```json
+{
+  "type": "existing_data",
+  "stock_code": "A005930",
+  "data": {
+    "close": 71000,
+    "volume": 15000,
+    "tradeType": "1"
+  },
+  "timestamp": 1234567890
+}
+```
+
+**3. 실시간 업데이트**
+```json
+{
+  "type": "realtime_update",
+  "stock_code": "A005930",
+  "data": {
+    "close": 71500,
+    "volume": 16000,
+    "tradeType": "1"
+  },
+  "timestamp": 1234567890
+}
+```
+
+**4. 연결 확인 Ping (30초마다)**
+```json
+{
+  "type": "ping",
+  "timestamp": 1234567890,
+  "count": 5,
+  "subscribed_stocks": ["A005930", "A000660"]
+}
+```
+
+**5. 에러 메시지**
+```json
+{
+  "type": "error",
+  "message": "Toss 실시간 데이터 구독에 실패했습니다.",
+  "code": "SUBSCRIPTION_FAILED"
+}
+```
+
+#### 관리 API
+
+```bash
+# WebSocket 연결 상태 조회
+GET /api/v1/trading/toss-ws/status
+
+# 특정 주식 구독자들에게 브로드캐스트 (테스트용)
+POST /api/v1/trading/toss-ws/broadcast/{stock_code}
+```
+
+#### JavaScript 클라이언트 예제
+
+```javascript
+// WebSocket 연결
+const ws = new WebSocket('ws://localhost:8000/api/v1/trading/toss-ws?stock_code=A005930&user_id=1');
+
+ws.onopen = function(event) {
+    console.log('🔌 Toss WebSocket 연결됨');
+};
+
+ws.onmessage = function(event) {
+    const message = JSON.parse(event.data);
+    
+    switch(message.type) {
+        case 'connection_success':
+            console.log('✅ 구독 시작:', message.stock_code);
+            break;
+            
+        case 'existing_data':
+            console.log('📦 기존 데이터:', message.data);
+            updateStockDisplay(message.stock_code, message.data);
+            break;
+            
+        case 'realtime_update':
+            console.log('📊 실시간 업데이트:', message.data);
+            updateStockDisplay(message.stock_code, message.data);
+            break;
+            
+        case 'ping':
+            console.log('📡 연결 유지 중... 구독 종목:', message.subscribed_stocks);
+            break;
+            
+        case 'error':
+            console.error('❌ 오류:', message.message);
+            break;
+    }
+};
+
+ws.onclose = function(event) {
+    console.log('🔴 WebSocket 연결 종료:', event.code);
+};
+
+ws.onerror = function(error) {
+    console.error('❌ WebSocket 오류:', error);
+};
+
+function updateStockDisplay(stockCode, data) {
+    // 실시간 주가 UI 업데이트 로직
+    document.getElementById(`price-${stockCode}`).textContent = data.close;
+    document.getElementById(`volume-${stockCode}`).textContent = data.volume;
+}
+```
+
+#### 핵심 특징
+
+✅ **효율적인 구조**
+- KIS와 달리 개별 WebSocket 연결 없이 Redis 기반 데이터 공유
+- 하나의 `TossWsRelayer`가 모든 클라이언트에게 데이터 제공
+
+✅ **자동 관리**
+- 클라이언트 연결 시 자동으로 `TossWsRelayer`에 구독 요청
+- 연결 해제 시 자동으로 구독 정리 및 리소스 해제
+
+✅ **실시간 성능**
+- Redis Pub/Sub를 통한 즉시 데이터 전파
+- 기존 데이터 즉시 전송으로 초기 로딩 시간 단축
+
+✅ **확장성**
+- 클라이언트 수와 무관하게 안정적인 성능
+- 로드밸런싱 환경에서도 데이터 일관성 보장
+
 ### 실행 방법
 
 #### **통합 서비스 실행**
@@ -197,12 +373,12 @@ GET /api/v1/admin/websocket/subscriptions
 동적 구독 관리의 전체 프로세스는 다음과 같습니다:
 
 ```
-1. FastAPI 엔드포인트 → WebSocketCommandService 호출
-2. WebSocketCommandService → Redis에 명령 전송  
+1. FastAPI 엔드포인트 → TossWebSocketCommandService 호출
+2. TossWebSocketCommandService → Redis에 명령 전송  
 3. WebSocket 데몬 → Redis에서 명령 수신
 4. WebSocket 데몬 → Toss WebSocket에 실제 구독/해제 실행
 5. WebSocket 데몬 → Redis에 결과 저장
-6. WebSocketCommandService → 폴링으로 결과 조회
+6. TossWebSocketCommandService → 폴링으로 결과 조회
 7. FastAPI 엔드포인트 → 클라이언트에 응답
 ```
 
@@ -425,6 +601,7 @@ docker-compose up
 - **실시간 데이터**: http://localhost:8000/api/v1/trading/realtime/stocks/all
 - **데몬 상태**: http://localhost:8000/api/v1/trading/realtime/daemon/health
 - **구독 관리**: http://localhost:8000/api/v1/admin/websocket/subscriptions
+- **Toss WebSocket**: ws://localhost:8000/api/v1/trading/toss-ws?stock_code=A005930
 
 ### 동적 구독 테스트
 
@@ -532,8 +709,9 @@ app/
 │   ├── schemas/           # 공통 스키마
 │   └── v1/               # API v1
 │       ├── endpoints/     # 컨트롤러
-│       │   ├── realtime_controller.py      # 실시간 데이터 API
-│       │   └── websocket_controller.py     # WebSocket 관리 API
+│       │   ├── toss_realtime_data_controller.py      # 실시간 데이터 API
+│       │   ├── toss_ws_controller.py       # Toss WebSocket API
+│       │   └── toss_ws_relayer_controller.py     # WebSocket 관리 API
 │       └── schemas/       # v1 스키마
 │           └── stock_schemas.py            # 주식 데이터 스키마
 ├── config/               # 설정 파일

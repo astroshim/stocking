@@ -15,6 +15,7 @@ from app.services.service_factory import (
 from app.db.repositories.routine_marketing_repository import RoutineMarketingRepository
 from app.services.routine_marketing_service import RoutineMarketingService
 from app.services.toss_proxy_service import TossProxyService
+from app.services.redis_service import RedisService
 
 def get_user_service(db: Session = Depends(get_db)):
     """UserService dependency"""
@@ -68,4 +69,8 @@ def get_routine_marketing_service(db: Session = Depends(get_db)):
 
 def get_toss_proxy_service():
     """TossProxyService dependency"""
-    return TossProxyService() 
+    return TossProxyService()
+
+def get_redis_service():
+    """RedisService dependency"""
+    return RedisService() 

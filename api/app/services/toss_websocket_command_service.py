@@ -1,5 +1,5 @@
 """
-WebSocket 명령 서비스
+Toss WebSocket 명령 서비스
 
 Toss WebSocket 릴레이어에 동적으로 구독/구독해제 명령을 전송하는 서비스
 """
@@ -13,7 +13,7 @@ from typing import Dict, Any, Optional
 import redis.asyncio as redis
 
 
-class WebSocketCommandService:
+class TossWebSocketCommandService:
     """Toss WebSocket 릴레이어 명령 서비스"""
     
     def __init__(self, redis_client: redis.Redis):
@@ -183,6 +183,6 @@ class WebSocketCommandService:
             raise Exception(f"Failed to send reconnect command: {str(e)}")
 
 
-async def get_websocket_command_service(redis_client: redis.Redis) -> WebSocketCommandService:
-    """WebSocket 명령 서비스 인스턴스 반환"""
-    return WebSocketCommandService(redis_client)
+async def get_toss_websocket_command_service(redis_client: redis.Redis) -> TossWebSocketCommandService:
+    """Toss WebSocket 명령 서비스 인스턴스 반환"""
+    return TossWebSocketCommandService(redis_client)
