@@ -21,6 +21,7 @@ from app.api.v1.schemas.portfolio_schema import (
     WatchlistDirectoryDetailResponse
 )
 from app.utils.response_helper import create_response
+from app.utils.data_converters import DataConverters
 
 
 router = APIRouter()
@@ -44,17 +45,7 @@ async def create_watchlist_directory(
         )
         
         return create_response(
-            data={
-                'id': directory.id,
-                'user_id': directory.user_id,
-                'name': directory.name,
-                'description': directory.description,
-                'display_order': directory.display_order,
-                'color': directory.color,
-                'is_active': directory.is_active,
-                'created_at': directory.created_at,
-                'updated_at': directory.updated_at
-            },
+            data=DataConverters.convert_directory_to_dict(directory),
             status_code=201,
             message="관심종목 디렉토리가 성공적으로 생성되었습니다."
         )
@@ -157,17 +148,7 @@ async def update_watchlist_directory(
         )
         
         return create_response(
-            data={
-                'id': directory.id,
-                'user_id': directory.user_id,
-                'name': directory.name,
-                'description': directory.description,
-                'display_order': directory.display_order,
-                'color': directory.color,
-                'is_active': directory.is_active,
-                'created_at': directory.created_at,
-                'updated_at': directory.updated_at
-            },
+            data=DataConverters.convert_directory_to_dict(directory),
             status_code=200,
             message="관심종목 디렉토리가 성공적으로 수정되었습니다."
         )
@@ -203,7 +184,7 @@ async def delete_watchlist_directory(
 
 # ========== 관심종목 관련 API ==========
 
-@router.post("/watchlist", summary="관심종목 추가")
+@router.post("/", summary="관심종목 추가")
 async def add_to_watchlist(
     watchlist_data: WatchListCreate,
     current_user_id: str = Depends(get_current_user),
@@ -213,7 +194,7 @@ async def add_to_watchlist(
     try:
         watchlist = portfolio_service.add_to_watchlist(
             user_id=current_user_id,
-            stock_id=watchlist_data.stock_id,
+            product_code=watchlist_data.product_code,
             directory_id=watchlist_data.directory_id,
             memo=watchlist_data.memo,
             target_price=watchlist_data.target_price
@@ -230,7 +211,7 @@ async def add_to_watchlist(
         raise HTTPException(status_code=500, detail=f"관심종목 추가 실패: {str(e)}")
 
 
-@router.get("/watchlist", response_model=WatchListListResponse, summary="관심종목 목록")
+@router.get("/", response_model=WatchListListResponse, summary="관심종목 목록")
 async def get_watchlist(
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(20, ge=1, le=100, description="페이지 크기"),
@@ -258,7 +239,7 @@ async def get_watchlist(
         raise HTTPException(status_code=500, detail=f"관심종목 목록 조회 실패: {str(e)}")
 
 
-@router.put("/watchlist/{watchlist_id}", summary="관심종목 수정")
+@router.put("/{watchlist_id}", summary="관심종목 수정")
 async def update_watchlist(
     watchlist_id: str,
     watchlist_data: WatchListUpdate,
@@ -286,7 +267,7 @@ async def update_watchlist(
         raise HTTPException(status_code=500, detail=f"관심종목 수정 실패: {str(e)}")
 
 
-@router.delete("/watchlist/{watchlist_id}", summary="관심종목 삭제")
+@router.delete("/{watchlist_id}", summary="관심종목 삭제")
 async def remove_from_watchlist(
     watchlist_id: str,
     current_user_id: str = Depends(get_current_user),
@@ -310,7 +291,7 @@ async def remove_from_watchlist(
         raise HTTPException(status_code=500, detail=f"관심종목 삭제 실패: {str(e)}")
 
 
-@router.put("/watchlist/{watchlist_id}/order", summary="관심종목 순서 변경")
+@router.put("/{watchlist_id}/order", summary="관심종목 순서 변경")
 async def reorder_watchlist(
     watchlist_id: str,
     new_order: int = Query(..., description="새로운 순서"),

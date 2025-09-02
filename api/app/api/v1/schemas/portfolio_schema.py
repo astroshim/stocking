@@ -100,7 +100,7 @@ class PortfolioAnalysisResponse(BaseModel):
 
 
 class WatchListBase(BaseModel):
-    stock_id: str = Field(..., description="주식 종목 ID")
+    product_code: str = Field(..., description="상품 코드 (주식, 코인 등)")
 
 
 class WatchListCreate(WatchListBase):
@@ -132,7 +132,7 @@ class WatchListUpdate(BaseModel):
 class WatchListResponse(InitVarModel):
     id: str
     user_id: str
-    stock_id: str
+    product_code: str
     directory_id: Optional[str]
     add_date: datetime
     target_price: Optional[Decimal]

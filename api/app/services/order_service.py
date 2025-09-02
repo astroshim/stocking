@@ -48,12 +48,12 @@ class OrderService:
             # 주문 유효성 검증 (컨트롤러에서 이미 DB Enum으로 변환됨)
             self._validate_order(order_data)
 
-            print(f"-----------> order_data: {order_data}") 
-            # 잔고 확인 및 예약
+            # 주문 타입별 잔고/보유 주식 검증 및 예약
             if order_data['order_type'] == OrderType.BUY:
+                # 매수 주문: 필요 금액(주문금액 + 수수료) 검증 및 잔고 예약
                 self._reserve_cash_for_buy_order(user_id, order_data)
             elif order_data['order_type'] == OrderType.SELL:
-                print(f"-----------> 매도 order_data: {order_data}") 
+                # 매도 주문: 보유 주식 수량 검증 (예약된 수량 고려)
                 self._validate_sell_order(user_id, order_data)
             
             # 주문 생성
@@ -266,7 +266,13 @@ class OrderService:
             return order
 
     def _validate_order(self, order_data: Dict[str, Any]) -> None:
-        """주문 유효성을 검증합니다."""
+        """
+        주문 기본 유효성을 검증합니다.
+        
+        주의: 잔고 및 보유 주식 검증은 별도로 수행됩니다:
+        - 매수 주문: _reserve_cash_for_buy_order()에서 잔고 확인 및 예약
+        - 매도 주문: _validate_sell_order()에서 보유 주식 수량 확인
+        """
         if order_data['quantity'] <= 0:
             raise ValidationError("Order quantity must be positive")
         
@@ -276,44 +282,106 @@ class OrderService:
         if order_data['order_method'] == OrderMethod.MARKET and order_data.get('order_price'):
             # 시장가 주문에서는 현재가 사용
             order_data['order_price'] = self._get_current_price(order_data['stock_id'])
+            
+        # 기본적인 주문 가격 검증
+        if order_data.get('order_price') and order_data['order_price'] <= 0:
+            raise ValidationError("Order price must be positive")
 
     def _reserve_cash_for_buy_order(self, user_id: str, order_data: Dict[str, Any]) -> None:
-        """매수 주문을 위한 현금을 예약합니다."""
-        amount = order_data['quantity'] * order_data['order_price']
-        # 예상 수수료(최소 500원) 및 세금(매수 시 0)
-        expected_commission = self._calculate_commission(amount)
-        expected_tax = Decimal('0')
-        required_amount = amount + expected_commission + expected_tax
+        """
+        매수 주문을 위한 현금을 예약합니다.
+        
+        Args:
+            user_id: 사용자 ID
+            order_data: 주문 데이터 (quantity, order_price 포함)
+            
+        Raises:
+            InsufficientBalanceError: 잔고 부족 시
+        """
+        quantity = order_data['quantity']
+        order_price = order_data['order_price']
+        stock_id = order_data.get('stock_id', 'Unknown')
+        
+        # 주문 금액 계산
+        order_amount = quantity * order_price
+        
+        # 예상 수수료 및 세금 계산
+        expected_commission = self._calculate_commission(order_amount)
+        expected_tax = Decimal('0')  # 매수 시 세금 없음
+        required_amount = order_amount + expected_commission + expected_tax
 
+        # 사용자 잔고 조회
         virtual_balance = self.virtual_balance_repository.get_by_user_id(user_id)
-        if not virtual_balance or virtual_balance.available_cash < required_amount:
-            # 구현과 테스트 모두에서 일관되게 한글 메시지 사용 ("잔고" 키워드 포함)
-            raise InsufficientBalanceError("가용 잔고가 부족합니다 (수수료/세금 포함)")
+        
+        if not virtual_balance:
+            raise InsufficientBalanceError("가상 잔고를 찾을 수 없습니다")
+            
+        # 잔고 부족 검증 (상세한 정보 포함)
+        if virtual_balance.available_cash < required_amount:
+            raise InsufficientBalanceError(
+                f"가용 잔고가 부족합니다. "
+                f"필요 금액: {required_amount:,.0f}원 "
+                f"(주문금액: {order_amount:,.0f}원 + 수수료: {expected_commission:,.0f}원), "
+                f"가용 잔고: {virtual_balance.available_cash:,.0f}원"
+            )
+
+        # 로깅: 주문 정보
+        logging.info(
+            f"매수 주문 잔고 예약 - 사용자: {user_id}, 종목: {stock_id}, "
+            f"수량: {quantity}, 가격: {order_price:,.0f}원, "
+            f"필요 금액: {required_amount:,.0f}원, 가용 잔고: {virtual_balance.available_cash:,.0f}원"
+        )
 
         # 사용 가능한 현금에서 차감 (주문 완료/취소 시까지 예약)
         virtual_balance.available_cash -= required_amount
 
         # 변경사항을 DB에 즉시 반영
         self.virtual_balance_repository.session.flush()
+        
+        logging.info(f"잔고 예약 완료 - 예약 후 가용 잔고: {virtual_balance.available_cash:,.0f}원")
 
     def _validate_sell_order(self, user_id: str, order_data: Dict[str, Any]) -> None:
-        """매도 주문을 검증합니다."""
+        """
+        매도 주문을 검증합니다.
+        
+        Args:
+            user_id: 사용자 ID
+            order_data: 주문 데이터 (stock_id, quantity 포함)
+            
+        Raises:
+            ValidationError: 보유 주식 부족 시
+        """
         stock_id = order_data['stock_id']
         sell_quantity = order_data['quantity']
+        order_price = order_data.get('order_price', 0)
         
         # 포트폴리오에서 보유 수량 확인
         portfolio = self.portfolio_repository.get_by_user_and_stock(user_id, stock_id)
 
-        if not portfolio:
-            raise ValidationError(f"주식 {stock_id}을(를) 보유하고 있지 않습니다")
+        if not portfolio or not portfolio.is_active:
+            raise ValidationError(f"종목 {stock_id}을(를) 보유하고 있지 않습니다")
         
         # 대기/부분체결 SELL 주문의 잔여 수량 예약치를 반영하여 검증
         reserved_quantity = self.order_repository.get_pending_sell_reserved_quantity(user_id, stock_id)
         available_to_sell = portfolio.current_quantity - reserved_quantity
+        
+        # 로깅: 매도 주문 정보
+        logging.info(
+            f"매도 주문 검증 - 사용자: {user_id}, 종목: {stock_id}, "
+            f"매도 수량: {sell_quantity}, 가격: {order_price:,.0f}원, "
+            f"보유 수량: {portfolio.current_quantity}, 예약 수량: {reserved_quantity}, "
+            f"매도 가능 수량: {available_to_sell}"
+        )
+        
         if available_to_sell < sell_quantity:
             raise ValidationError(
-                f"매도 가능 수량({available_to_sell})이 매도 요청 수량({sell_quantity})보다 부족합니다"
+                f"매도 가능 수량이 부족합니다. "
+                f"매도 요청: {sell_quantity}주, "
+                f"매도 가능: {available_to_sell}주 "
+                f"(보유: {portfolio.current_quantity}주 - 예약: {reserved_quantity}주)"
             )
+            
+        logging.info(f"매도 주문 검증 완료 - 종목: {stock_id}, 매도 수량: {sell_quantity}주")
 
     def _execute_market_order(self, order: Order) -> None:
         """시장가 주문을 즉시 체결합니다."""

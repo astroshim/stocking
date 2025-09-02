@@ -48,6 +48,12 @@ def portfolio_service_factory(db: Session = None):
     return PortfolioService(db)
 
 
+def balance_service_factory(db: Session = None):
+    """BalanceService 인스턴스 생성을 위한 팩토리 함수"""
+    from app.services.balance_service import BalanceService
+    return BalanceService(db)
+
+
 def order_service_factory(db: Session = None):
     """OrderService 인스턴스 생성을 위한 팩토리 함수"""
     from app.db.repositories.order_repository import OrderRepository

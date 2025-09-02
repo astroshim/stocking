@@ -5,11 +5,10 @@ from datetime import datetime, date
 
 from app.db.repositories.portfolio_repository import PortfolioRepository
 from app.db.repositories.watchlist_repository import WatchListRepository
-from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
 from app.db.models.portfolio import Portfolio
-from app.db.models.virtual_balance import VirtualBalanceHistory
 from app.db.models.watchlist import WatchList, WatchlistDirectory
 from app.utils.simple_paging import SimplePage
+from app.utils.data_converters import DataConverters
 
 
 class PortfolioService:
@@ -19,7 +18,6 @@ class PortfolioService:
         self.db = db
         self.portfolio_repo = PortfolioRepository(db)
         self.watchlist_repo = WatchListRepository(db)
-        self.virtual_balance_repo = VirtualBalanceRepository(db)
 
     def get_user_portfolio(
         self, 
@@ -37,41 +35,10 @@ class PortfolioService:
         paged_portfolios = portfolios[offset:offset + size]
         
         # 포트폴리오 데이터 변환
-        portfolio_data = []
-        for portfolio in paged_portfolios:
-            # TODO: 실제 주식 가격 조회 로직 필요 (임시로 평균 매수가 사용)
-            current_price = portfolio.average_price
-
-            current_value = portfolio.current_quantity * current_price
-            invested_amount = portfolio.current_quantity * portfolio.average_price
-            unrealized_profit_loss = current_value - invested_amount
-            unrealized_profit_loss_rate = (
-                (unrealized_profit_loss / invested_amount * 100)
-                if invested_amount > 0 else Decimal('0')
-            )
-
-            portfolio_data.append({
-                'id': portfolio.id,
-                'user_id': portfolio.user_id,
-                'stock_id': portfolio.stock_id,
-                'quantity': portfolio.current_quantity,
-                'average_buy_price': portfolio.average_price,
-                'total_buy_amount': portfolio.current_quantity * portfolio.average_price,
-                'current_value': current_value,
-                'unrealized_profit_loss': unrealized_profit_loss,
-                'unrealized_profit_loss_rate': unrealized_profit_loss_rate,
-                'realized_profit_loss': portfolio.realized_profit_loss,
-                'first_buy_date': portfolio.first_buy_date,
-                'last_buy_date': portfolio.last_buy_date,
-                'last_sell_date': portfolio.last_sell_date,
-                'last_updated_at': portfolio.last_updated_at,
-                'is_active': portfolio.is_active,
-                'notes': portfolio.notes,
-                'created_at': portfolio.created_at,
-                'updated_at': portfolio.updated_at,
-                'stock_name': f"주식 {portfolio.stock_id}",
-                'current_price': current_price,
-            })
+        portfolio_data = [
+            DataConverters.convert_portfolio_to_dict(portfolio)
+            for portfolio in paged_portfolios
+        ]
         
         return SimplePage(
             items=portfolio_data,
@@ -122,60 +89,14 @@ class PortfolioService:
         if not portfolio:
             return None
         
-        # TODO: 실제 주식 가격 조회 로직 필요 (임시로 평균 매수가 사용)
-        current_price = portfolio.average_price
+        return DataConverters.convert_portfolio_to_dict(portfolio)
 
-        current_value = portfolio.current_quantity * current_price
-        invested_amount = portfolio.current_quantity * portfolio.average_price
-        unrealized_profit_loss = current_value - invested_amount
-        unrealized_profit_loss_rate = (
-            (unrealized_profit_loss / invested_amount * 100)
-            if invested_amount > 0 else Decimal('0')
-        )
 
-        return {
-            'id': portfolio.id,
-            'user_id': portfolio.user_id,
-            'stock_id': portfolio.stock_id,
-            'quantity': portfolio.current_quantity,
-            'average_buy_price': portfolio.average_price,
-            'total_buy_amount': portfolio.current_quantity * portfolio.average_price,
-            'current_value': current_value,
-            'unrealized_profit_loss': unrealized_profit_loss,
-            'unrealized_profit_loss_rate': unrealized_profit_loss_rate,
-            'realized_profit_loss': portfolio.realized_profit_loss,
-            'first_buy_date': portfolio.first_buy_date,
-            'last_buy_date': portfolio.last_buy_date,
-            'last_sell_date': portfolio.last_sell_date,
-            'last_updated_at': portfolio.last_updated_at,
-            'is_active': portfolio.is_active,
-            'notes': portfolio.notes,
-            'created_at': portfolio.created_at,
-            'updated_at': portfolio.updated_at,
-            'stock_name': f"주식 {portfolio.stock_id}",
-            'current_price': current_price,
-        }
-
-    def get_balance_history(
-        self,
-        user_id: str,
-        page: int = 1,
-        size: int = 50,
-        change_type: Optional[str] = None,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """잔고 변동 이력 조회"""
-        # VirtualBalanceHistory 모델에서 조회
-        # TODO: 실제 구현 시 날짜 필터링 및 타입 필터링 추가
-        
-        # 임시로 빈 리스트 반환
-        return []
 
     def add_to_watchlist(
         self,
         user_id: str,
-        stock_id: str,
+        product_code: str,
         directory_id: Optional[str] = None,
         category: str = "기본",
         memo: Optional[str] = None,
@@ -190,7 +111,7 @@ class PortfolioService:
             
             watchlist = self.watchlist_repo.create_watchlist(
                 user_id=user_id,
-                stock_id=stock_id,
+                product_code=product_code,
                 directory_id=directory_id,
                 category=category,
                 memo=memo,
@@ -219,41 +140,14 @@ class PortfolioService:
         )
         
         # 관심 종목 데이터 변환
-        watchlist_data = []
-        for watchlist in page_result.items:
-            current_price = (
-                watchlist.stock.current_price.current_price 
-                if watchlist.stock.current_price 
-                else Decimal('0')
+        watchlist_data = [
+            DataConverters.convert_watchlist_to_dict(
+                watchlist, 
+                include_product_details=True,
+                current_price=None  # TODO: 외부 API에서 현재가 조회
             )
-            
-            # 목표가 대비 변동률 계산
-            target_achievement = None
-            if watchlist.target_price and watchlist.target_price > 0:
-                target_achievement = float(
-                    (current_price - Decimal(str(watchlist.target_price))) / 
-                    Decimal(str(watchlist.target_price)) * 100
-                )
-            
-            watchlist_data.append({
-                'id': watchlist.id,
-                'stock': {
-                    'id': watchlist.stock.id,
-                    'code': watchlist.stock.code,
-                    'name': watchlist.stock.name,
-                    'market': watchlist.stock.market,
-                    'sector': watchlist.stock.sector,
-                    'current_price': float(current_price),
-                    'price_change': 0,  # TODO: 전일대비 변동률 계산
-                    'price_change_rate': 0
-                },
-                'category': watchlist.category,
-                'memo': watchlist.memo,
-                'target_price': watchlist.target_price,
-                'target_achievement': target_achievement,
-                'display_order': watchlist.display_order,
-                'created_at': watchlist.created_at.isoformat()
-            })
+            for watchlist in page_result.items
+        ]
         
         return SimplePage(
             items=watchlist_data,
@@ -360,23 +254,14 @@ class PortfolioService:
         page_result = self.watchlist_repo.get_directories_with_stats(user_id, page=page, per_page=size)
         
         # 응답 데이터 변환
-        directory_data = []
-        for item in page_result.items:
-            directory = item['directory']
-            watchlist_count = item['watchlist_count']
-            
-            directory_data.append({
-                'id': directory.id,
-                'user_id': directory.user_id,  # 누락된 user_id 필드 추가
-                'name': directory.name,
-                'description': directory.description,
-                'display_order': directory.display_order,
-                'color': directory.color,
-                'watchlist_count': watchlist_count,
-                'is_active': directory.is_active,
-                'created_at': directory.created_at.isoformat(),
-                'updated_at': directory.updated_at.isoformat()
-            })
+        directory_data = [
+            DataConverters.convert_directory_to_dict(
+                item['directory'],
+                include_stats=True,
+                watchlist_count=item['watchlist_count']
+            )
+            for item in page_result.items
+        ]
         
         return SimplePage(
             items=directory_data,
@@ -395,42 +280,18 @@ class PortfolioService:
         watchlists = result['watch_lists']
         
         # 관심종목 데이터 변환
-        watchlist_data = []
-        for watchlist in watchlists:
-            current_price = (
-                watchlist.stock.current_price.current_price 
-                if watchlist.stock.current_price 
-                else Decimal('0')
+        watchlist_data = [
+            DataConverters.convert_watchlist_to_dict(
+                watchlist, 
+                include_product_details=True,
+                current_price=None  # TODO: 외부 API에서 현재가 조회
             )
-            
-            watchlist_data.append({
-                'id': watchlist.id,
-                'stock': {
-                    'id': watchlist.stock.id,
-                    'code': watchlist.stock.code,
-                    'name': watchlist.stock.name,
-                    'market': watchlist.stock.market,
-                    'sector': watchlist.stock.sector,
-                    'current_price': float(current_price),
-                },
-                'memo': watchlist.memo,
-                'target_price': watchlist.target_price,
-                'display_order': watchlist.display_order,
-                'created_at': watchlist.created_at.isoformat()
-            })
+            for watchlist in watchlists
+        ]
         
-        return {
-            'id': directory.id,
-            'user_id': directory.user_id,  # 누락된 user_id 필드 추가
-            'name': directory.name,
-            'description': directory.description,
-            'display_order': directory.display_order,
-            'color': directory.color,
-            'is_active': directory.is_active,
-            'created_at': directory.created_at.isoformat(),
-            'updated_at': directory.updated_at.isoformat(),
-            'watch_lists': watchlist_data
-        }
+        directory_dict = DataConverters.convert_directory_to_dict(directory)
+        directory_dict['watch_lists'] = watchlist_data
+        return directory_dict
 
     def update_watchlist_directory(
         self,
@@ -481,14 +342,4 @@ class PortfolioService:
         # 기본 디렉토리 자동 생성
         default_directory = self.watchlist_repo.ensure_default_directory(user_id)
         
-        return {
-            'id': default_directory.id,
-            'user_id': default_directory.user_id,  # 누락된 user_id 필드 추가
-            'name': default_directory.name,
-            'description': default_directory.description,
-            'display_order': default_directory.display_order,
-            'color': default_directory.color,
-            'is_active': default_directory.is_active,
-            'created_at': default_directory.created_at.isoformat(),
-            'updated_at': default_directory.updated_at.isoformat()
-        }
+        return DataConverters.convert_directory_to_dict(default_directory)

@@ -4,7 +4,6 @@ from sqlalchemy import and_, desc, func
 
 from app.db.repositories.base_repository import BaseRepository
 from app.db.models.watchlist import WatchList, WatchlistDirectory
-from app.db.models.stock import Stock, StockPrice
 from app.utils.simple_paging import SimplePage, paginate_without_count
 
 
@@ -27,21 +26,19 @@ class WatchListRepository(BaseRepository):
         if category:
             query = query.filter(WatchList.category == category)
         
-        query = query.options(
-            joinedload(WatchList.stock).joinedload(Stock.current_price)
-        ).order_by(
+        query = query.order_by(
             WatchList.display_order.asc(),
             WatchList.created_at.desc()
         )
         
         return paginate_without_count(query, page=page, per_page=per_page)
 
-    def get_by_user_and_stock(self, user_id: str, stock_id: str) -> Optional[WatchList]:
-        """사용자의 특정 종목 관심 목록 조회"""
+    def get_by_user_and_product(self, user_id: str, product_code: str) -> Optional[WatchList]:
+        """사용자의 특정 상품 관심 목록 조회"""
         return self.session.query(WatchList).filter(
             and_(
                 WatchList.user_id == user_id,
-                WatchList.stock_id == stock_id
+                WatchList.product_code == product_code
             )
         ).first()
 
@@ -53,23 +50,23 @@ class WatchListRepository(BaseRepository):
                 WatchList.user_id == user_id
             )
         ).options(
-            joinedload(WatchList.stock).joinedload(Stock.current_price)
+
         ).first()
 
     def create_watchlist(
         self,
         user_id: str,
-        stock_id: str,
+        product_code: str,
         directory_id: Optional[str] = None,
         category: str = "기본",
         memo: Optional[str] = None,
         target_price: Optional[float] = None
     ) -> WatchList:
         """새 관심 종목 추가"""
-        # 기존에 같은 종목이 있는지 확인
-        existing = self.get_by_user_and_stock(user_id, stock_id)
+        # 기존에 같은 상품이 있는지 확인
+        existing = self.get_by_user_and_product(user_id, product_code)
         if existing:
-            raise ValueError("이미 관심 종목에 추가된 주식입니다")
+            raise ValueError("이미 관심 종목에 추가된 상품입니다")
         
         # 디렉토리가 지정된 경우 존재하는지 확인
         if directory_id:
@@ -90,7 +87,7 @@ class WatchListRepository(BaseRepository):
         
         watchlist = WatchList(
             user_id=user_id,
-            stock_id=stock_id,
+            product_code=product_code,
             directory_id=directory_id,
             category=category,
             memo=memo,
@@ -215,19 +212,13 @@ class WatchListRepository(BaseRepository):
         return query.count()
 
     def check_target_price_alerts(self, user_id: str) -> List[WatchList]:
-        """목표가 알림 대상 조회"""
-        return self.session.query(WatchList).join(
-            Stock
-        ).join(
-            StockPrice
-        ).filter(
+        """목표가 알림 대상 조회 - 외부 API와 조합하여 구현 필요"""
+        # TODO: product_code 기반으로 외부 API에서 현재가를 조회하여 목표가와 비교하는 로직 구현
+        return self.session.query(WatchList).filter(
             and_(
                 WatchList.user_id == user_id,
-                WatchList.target_price.isnot(None),
-                WatchList.target_price <= StockPrice.current_price
+                WatchList.target_price.isnot(None)
             )
-        ).options(
-            joinedload(WatchList.stock).joinedload(Stock.current_price)
         ).all()
 
     # ========== 관심종목 디렉토리 관련 메서드 ==========
@@ -395,7 +386,7 @@ class WatchListRepository(BaseRepository):
                 WatchList.is_active == True
             )
         ).options(
-            joinedload(WatchList.stock).joinedload(Stock.current_price)
+
         ).order_by(
             WatchList.display_order.asc(),
             WatchList.created_at.desc()

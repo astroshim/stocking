@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import user_controller, report_controller, \
     storage_controller, auth_controller, comment_controller, role_controller, payment_controller, \
-    notice_controller, stock_controller, order_controller, portfolio_controller, trading_controller, kis_ws_controller, toss_requester_controller, routine_marketing_controller, watchlist_controller, toss_ws_relayer_controller, toss_realtime_data_controller, toss_ws_controller
+    notice_controller, stock_controller, order_controller, portfolio_controller, balance_controller, trading_controller, kis_ws_controller, toss_requester_controller, routine_marketing_controller, watchlist_controller, toss_ws_relayer_controller, toss_realtime_data_controller, toss_ws_controller
 
 api_v1_router = APIRouter()
 
@@ -12,7 +12,8 @@ api_v1_router.include_router(user_controller.router, prefix="/users", tags=["사
 # 주식 거래 관련 라우터
 api_v1_router.include_router(stock_controller.router, prefix="/trading", tags=["주식 관리"])
 api_v1_router.include_router(order_controller.router, prefix="/trading", tags=["주문 관리"])
-api_v1_router.include_router(portfolio_controller.router, prefix="/trading", tags=["포트폴리오 관리"])
+api_v1_router.include_router(portfolio_controller.router, prefix="/portfolio", tags=["포트폴리오 관리"])
+api_v1_router.include_router(balance_controller.router, prefix="/balance", tags=["잔고 관리"])
 api_v1_router.include_router(trading_controller.router, prefix="/trading", tags=["거래 분석"])
 
 # 관심종목 관리 (독립 라우터)

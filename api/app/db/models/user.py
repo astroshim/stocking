@@ -52,7 +52,7 @@ class User(UUIDMixin, Base):
     transactions = relationship('Transaction', back_populates='user', cascade='all, delete-orphan')
     trading_statistics = relationship('TradingStatistics', back_populates='user', cascade='all, delete-orphan')
     watch_lists = relationship('WatchList', back_populates='user', cascade='all, delete-orphan')
-    watchlist_directories = relationship('WatchlistDirectory', cascade='all, delete-orphan')
+    watchlist_directories = relationship('WatchlistDirectory', back_populates='user', cascade='all, delete-orphan')
 
     def __repr__(self):
         return f'<User {self.userid}>'

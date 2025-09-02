@@ -27,7 +27,7 @@ class WatchlistDirectory(UUIDMixin, Base):
     updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
     # 관계 설정
-    user = relationship('User')
+    user = relationship('User', back_populates='watchlist_directories')
     watch_lists = relationship('WatchList', back_populates='directory')
 
     def __repr__(self):
@@ -40,7 +40,7 @@ class WatchList(UUIDMixin, Base):
 
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, comment='사용자 ID')
     directory_id = Column(String(41), ForeignKey('watchlist_directories.id'), nullable=True, comment='디렉토리 ID')
-    stock_id = Column(String(20), nullable=False, comment='주식 종목 코드 (예: 097230)')
+    product_code = Column(String(20), nullable=False, comment='상품 코드 (주식, 코인 등 - 예: 097230, BTC-KRW)')
     
     # 관심 종목 정보
     add_date = Column(DateTime, nullable=False, default=datetime.now, comment='추가일')
@@ -68,4 +68,4 @@ class WatchList(UUIDMixin, Base):
     directory = relationship('WatchlistDirectory', back_populates='watch_lists')
 
     def __repr__(self):
-        return f'<WatchList {self.user_id}: {self.stock_id}>'
+        return f'<WatchList {self.user_id}: {self.product_code}>'
