@@ -9,6 +9,22 @@ from app.db.models.order import OrderType, OrderMethod
 from app.db.repositories.order_repository import OrderRepository
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
 from app.services.order_service import OrderService
+class FakeTossProxyService:
+    def get_stock_price_details(self, product_code: str):
+        return {"result": [{"close": 10000.0, "currency": "KRW"}]}
+
+    def get_exchange_rate(self, from_currency: str, to_currency: str = 'KRW'):
+        return Decimal('1300')
+
+def execute(service: OrderService, order_repo: OrderRepository, order_id, price, executed_quantity=None, commission=Decimal('0'), tax=Decimal('0')):
+    order = order_repo.get_by_id(order_id)
+    if executed_quantity is None:
+        executed_quantity = order.quantity - order.executed_quantity
+    execution = order_repo.execute_order(order, Decimal(price), Decimal(executed_quantity), Decimal(commission), Decimal(tax))
+    service._create_transaction_for_execution(order, execution)
+    service._update_virtual_balance_for_execution(order, execution)
+    service._update_portfolio_for_execution(order, execution)
+    return execution
 from app.services.payment_service import PaymentService
 from app.exceptions.custom_exceptions import ValidationError, InsufficientBalanceError
 
@@ -39,7 +55,7 @@ def test_prevent_oversell_with_pending_reservations(session):
     user = create_user_with_balance(session, Decimal('1000000'))
     order_repo = OrderRepository(session)
     vb_repo = VirtualBalanceRepository(session)
-    service = OrderService(order_repo, vb_repo)
+    service = OrderService(order_repo, vb_repo, FakeTossProxyService())
 
     # 보유 만들기: 10주 매수 후 체결
     buy_order = service.create_order(user.id, {
@@ -49,7 +65,7 @@ def test_prevent_oversell_with_pending_reservations(session):
         'quantity': Decimal('10'),
         'order_price': Decimal('10000')
     })
-    service.execute_order(user.id, buy_order.id, Decimal('10000'))
+    execute(service, order_repo, buy_order.id, Decimal('10000'))
 
     # 대기 SELL 6주 생성 (체결하지 않음)
     service.create_order(user.id, {

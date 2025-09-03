@@ -50,39 +50,6 @@ async def create_order(
         raise HTTPException(status_code=500, detail=f"주문 생성 실패: {str(e)}")
 
 
-@router.post("/orders/quick", summary="빠른 주문")
-async def create_quick_order(
-    quick_order: QuickOrderRequest,
-    current_user_id: str = Depends(get_current_user),
-    order_service: OrderService = Depends(get_order_service)
-):
-    """
-    빠른 주문 (시장가 즉시 체결)
-    - 매수: 금액 기준으로 주문
-    - 매도: 수량 기준으로 주문
-    """
-    try:
-        order = order_service.create_quick_order(
-            current_user_id,
-            quick_order.stock_id,
-            quick_order.order_type,
-            quick_order.amount_or_quantity
-        )
-        order_response = OrderResponse.model_validate(order)
-        
-        return create_response(
-            data=order_response.model_dump(),
-            status_code=201,
-            message="빠른 주문이 성공적으로 처리되었습니다."
-        )
-    except ValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except InsufficientBalanceError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"빠른 주문 처리 실패: {str(e)}")
-
-
 @router.get("/orders", response_model=OrderListResponse, summary="주문 목록 조회") 
 async def get_orders(
     page: int = Query(1, ge=1, description="페이지 번호"),

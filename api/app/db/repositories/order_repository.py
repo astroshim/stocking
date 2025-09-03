@@ -49,7 +49,7 @@ class OrderRepository(BaseRepository):
         if order_type:
             query = query.filter(Order.order_type == order_type)
         if stock_id:
-            query = query.filter(Order.stock_id == stock_id)
+            query = query.filter(Order.product_code == stock_id)
         
         offset = (page - 1) * size
         return query.order_by(desc(Order.created_at)).offset(offset).limit(size).all()
@@ -69,7 +69,7 @@ class OrderRepository(BaseRepository):
         if order_type:
             query = query.filter(Order.order_type == order_type)
         if stock_id:
-            query = query.filter(Order.stock_id == stock_id)
+            query = query.filter(Order.product_code == stock_id)
         
         return query.count()
 
@@ -265,7 +265,7 @@ class OrderRepository(BaseRepository):
         query = self.session.query(Order).filter(
             and_(
                 Order.user_id == user_id,
-                Order.stock_id == stock_id,
+                Order.product_code == stock_id,
                 Order.order_type == OrderType.SELL,
                 or_(
                     Order.order_status == OrderStatus.PENDING,

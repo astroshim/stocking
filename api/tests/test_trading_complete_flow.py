@@ -17,6 +17,22 @@ from app.db.repositories.transaction_repository import TransactionRepository
 from app.services.order_service import OrderService
 from app.services.payment_service import PaymentService
 from app.services.transaction_service import TransactionService
+class FakeTossProxyService:
+    def get_stock_price_details(self, product_code: str):
+        return {"result": [{"close": 50000.0, "currency": "KRW"}]}
+
+    def get_exchange_rate(self, from_currency: str, to_currency: str = 'KRW'):
+        return Decimal('1300')
+
+def execute(service: OrderService, order_repo: OrderRepository, order_id, price, executed_quantity=None, commission=Decimal('0'), tax=Decimal('0')):
+    order = order_repo.get_by_id(order_id)
+    if executed_quantity is None:
+        executed_quantity = order.quantity - order.executed_quantity
+    execution = order_repo.execute_order(order, Decimal(price), Decimal(executed_quantity), Decimal(commission), Decimal(tax))
+    service._create_transaction_for_execution(order, execution)
+    service._update_virtual_balance_for_execution(order, execution)
+    service._update_portfolio_for_execution(order, execution)
+    return execution
 
 
 @pytest.fixture()
@@ -149,7 +165,7 @@ class TestCompleteTradeFlow:
         order_repo = OrderRepository(session)
         vb_repo = VirtualBalanceRepository(session)
         portfolio_repo = PortfolioRepository(session)
-        service = OrderService(order_repo, vb_repo)
+        service = OrderService(order_repo, vb_repo, FakeTossProxyService())
         
         # 1) 매수 주문 생성
         buy_order_data = {
@@ -172,7 +188,7 @@ class TestCompleteTradeFlow:
         assert vb.available_cash == Decimal('500000')  # 가용 현금은 50만원 감소
         
         # 2) 주문 체결
-        service.execute_order(user.id, buy_order.id, Decimal('50000'))
+        execute(service, order_repo, buy_order.id, Decimal('50000'))
         
         # 체결 후 주문 상태 확인
         executed_order = session.query(Order).filter(Order.id == buy_order.id).first()
@@ -221,7 +237,7 @@ class TestCompleteTradeFlow:
         order_repo = OrderRepository(session)
         vb_repo = VirtualBalanceRepository(session)
         portfolio_repo = PortfolioRepository(session)
-        service = OrderService(order_repo, vb_repo)
+        service = OrderService(order_repo, vb_repo, FakeTossProxyService())
         
         # 먼저 10주를 5만원에 매수
         buy_order = service.create_order(user.id, {
@@ -231,7 +247,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('10'),
             'order_price': Decimal('50000')
         })
-        service.execute_order(user.id, buy_order.id, Decimal('50000'))
+        execute(service, order_repo, buy_order.id, Decimal('50000'))
         
         # 포트폴리오 초기 상태 확인
         portfolio = portfolio_repo.get_by_user_and_stock(user.id, 'stock001')
@@ -247,7 +263,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('5'),
             'order_price': Decimal('60000')
         })
-        service.execute_order(user.id, sell_order.id, Decimal('60000'))
+        execute(service, order_repo, sell_order.id, Decimal('60000'))
         
         # 매도 후 포트폴리오 확인
         portfolio = portfolio_repo.get_by_user_and_stock(user.id, 'stock001')
@@ -279,7 +295,7 @@ class TestCompleteTradeFlow:
         order_repo = OrderRepository(session)
         vb_repo = VirtualBalanceRepository(session)
         portfolio_repo = PortfolioRepository(session)
-        service = OrderService(order_repo, vb_repo)
+        service = OrderService(order_repo, vb_repo, FakeTossProxyService())
         
         # 첫 번째 매수: 10주 @ 50,000원
         order1 = service.create_order(user.id, {
@@ -289,7 +305,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('10'),
             'order_price': Decimal('50000')
         })
-        service.execute_order(user.id, order1.id, Decimal('50000'))
+        execute(service, order_repo, order1.id, Decimal('50000'))
         
         portfolio = portfolio_repo.get_by_user_and_stock(user.id, 'stock002')
         assert portfolio.current_quantity == 10
@@ -303,7 +319,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('20'),
             'order_price': Decimal('40000')
         })
-        service.execute_order(user.id, order2.id, Decimal('40000'))
+        execute(service, order_repo, order2.id, Decimal('40000'))
         
         # 평균 단가 계산: (10*50000 + 20*40000) / 30 = 43,333.33...
         portfolio = portfolio_repo.get_by_user_and_stock(user.id, 'stock002')
@@ -318,7 +334,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('30'),
             'order_price': Decimal('30000')
         })
-        service.execute_order(user.id, order3.id, Decimal('30000'))
+        execute(service, order_repo, order3.id, Decimal('30000'))
         
         # 평균 단가 재계산: (30*43333.33 + 30*30000) / 60 = 36,666.67
         portfolio = portfolio_repo.get_by_user_and_stock(user.id, 'stock002')
@@ -334,7 +350,7 @@ class TestCompleteTradeFlow:
         order_repo = OrderRepository(session)
         vb_repo = VirtualBalanceRepository(session)
         portfolio_repo = PortfolioRepository(session)
-        service = OrderService(order_repo, vb_repo)
+        service = OrderService(order_repo, vb_repo, FakeTossProxyService())
         
         # 10주 매수
         buy1 = service.create_order(user.id, {
@@ -344,7 +360,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('10'),
             'order_price': Decimal('100000')
         })
-        service.execute_order(user.id, buy1.id, Decimal('100000'))
+        execute(service, order_repo, buy1.id, Decimal('100000'))
         
         # 전량 매도
         sell = service.create_order(user.id, {
@@ -354,7 +370,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('10'),
             'order_price': Decimal('120000')
         })
-        service.execute_order(user.id, sell.id, Decimal('120000'))
+        execute(service, order_repo, sell.id, Decimal('120000'))
         
         # 전량 매도 후 포트폴리오 확인 (삭제될 수 있음)
         portfolio = portfolio_repo.get_by_user_and_stock(user.id, 'stock003')
@@ -372,7 +388,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('5'),
             'order_price': Decimal('110000')
         })
-        service.execute_order(user.id, buy2.id, Decimal('110000'))
+        execute(service, order_repo, buy2.id, Decimal('110000'))
         
         # 재매수 후 포트폴리오 확인
         portfolio = portfolio_repo.get_by_user_and_stock(user.id, 'stock003')
@@ -388,7 +404,7 @@ class TestCompleteTradeFlow:
         order_repo = OrderRepository(session)
         vb_repo = VirtualBalanceRepository(session)
         payment_service = PaymentService(session)
-        service = OrderService(order_repo, vb_repo)
+        service = OrderService(order_repo, vb_repo, FakeTossProxyService())
         
         # 1. 초기 이력 확인
         histories = vb_repo.get_balance_history(user.id)
@@ -410,7 +426,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('10'),
             'order_price': Decimal('50000')
         })
-        service.execute_order(user.id, buy.id, Decimal('50000'))
+        execute(service, order_repo, buy.id, Decimal('50000'))
         
         histories = vb_repo.get_balance_history(user.id)
         assert len(histories) == 3
@@ -426,7 +442,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('5'),
             'order_price': Decimal('60000')
         })
-        service.execute_order(user.id, sell.id, Decimal('60000'))
+        execute(service, order_repo, sell.id, Decimal('60000'))
         
         histories = vb_repo.get_balance_history(user.id)
         assert len(histories) == 4
@@ -453,7 +469,7 @@ class TestCompleteTradeFlow:
         
         order_repo = OrderRepository(session)
         vb_repo = VirtualBalanceRepository(session)
-        service = OrderService(order_repo, vb_repo)
+        service = OrderService(order_repo, vb_repo, FakeTossProxyService())
         
         # 첫 번째 매수 주문 (미체결)
         order1 = service.create_order(user.id, {
@@ -492,7 +508,7 @@ class TestCompleteTradeFlow:
             })
         
         # 첫 번째 주문 체결
-        service.execute_order(user.id, order1.id, Decimal('40000'))
+        execute(service, order_repo, order1.id, Decimal('40000'))
         
         vb = vb_repo.get_by_user_id(user.id)
         assert vb.cash_balance == Decimal('600000')  # 40만원 차감
@@ -512,7 +528,7 @@ class TestCompleteTradeFlow:
         order_repo = OrderRepository(session)
         vb_repo = VirtualBalanceRepository(session)
         portfolio_repo = PortfolioRepository(session)
-        service = OrderService(order_repo, vb_repo)
+        service = OrderService(order_repo, vb_repo, FakeTossProxyService())
         
         # 20주 매수
         buy = service.create_order(user.id, {
@@ -522,7 +538,7 @@ class TestCompleteTradeFlow:
             'quantity': Decimal('20'),
             'order_price': Decimal('50000')
         })
-        service.execute_order(user.id, buy.id, Decimal('50000'))
+        execute(service, order_repo, buy.id, Decimal('50000'))
         
         # 첫 번째 매도 주문 (10주, 미체결)
         sell1 = service.create_order(user.id, {
@@ -553,7 +569,7 @@ class TestCompleteTradeFlow:
             })
         
         # 첫 번째 매도 체결
-        service.execute_order(user.id, sell1.id, Decimal('60000'))
+        execute(service, order_repo, sell1.id, Decimal('60000'))
         
         portfolio = portfolio_repo.get_by_user_and_stock(user.id, 'stock008')
         assert portfolio.current_quantity == 10  # 10주 매도 완료
