@@ -60,7 +60,10 @@ class WatchListRepository(BaseRepository):
         directory_id: Optional[str] = None,
         category: str = "기본",
         memo: Optional[str] = None,
-        target_price: Optional[float] = None
+        target_price: Optional[float] = None,
+        *,
+        product_name: Optional[str] = None,
+        market: Optional[str] = None
     ) -> WatchList:
         """새 관심 종목 추가"""
         # 기존에 같은 상품이 있는지 확인
@@ -88,6 +91,8 @@ class WatchListRepository(BaseRepository):
         watchlist = WatchList(
             user_id=user_id,
             product_code=product_code,
+            product_name=product_name or product_code,
+            market=market or 'UNKNOWN',
             directory_id=directory_id,
             category=category,
             memo=memo,

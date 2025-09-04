@@ -72,6 +72,12 @@ def transaction_service_factory(db: Session = None):
     from app.services.transaction_service import TransactionService
     return TransactionService(db)
 
+def watchlist_service_factory(db: Session = None):
+    """WatchListService 인스턴스 생성을 위한 팩토리 함수"""
+    from app.services.watchlist_service import WatchListService
+    from app.services.toss_proxy_service import TossProxyService
+    return WatchListService(db, TossProxyService())
+
 # def get_s3_service(
 #         bucket_name: str = None,
 #         storage_domain: str = None,

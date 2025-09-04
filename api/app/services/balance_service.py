@@ -6,7 +6,7 @@ from datetime import datetime
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
 from app.db.models.virtual_balance import VirtualBalance, VirtualBalanceHistory
 from app.services.payment_service import PaymentService
-from app.api.v1.schemas.portfolio_schema import BalanceUpdateRequest
+from app.api.v1.schemas.virtual_balance_schema import BalanceUpdateRequest
 
 
 class BalanceService:

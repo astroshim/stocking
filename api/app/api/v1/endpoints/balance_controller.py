@@ -4,7 +4,7 @@ from typing import Optional
 from app.config.get_current_user import get_current_user
 from app.config.di import get_balance_service
 from app.services.balance_service import BalanceService
-from app.api.v1.schemas.portfolio_schema import (
+from app.api.v1.schemas.virtual_balance_schema import (
     VirtualBalanceResponse, VirtualBalanceHistoryResponse, BalanceUpdateRequest
 )
 from app.utils.response_helper import create_response

@@ -3,16 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.config.get_current_user import get_current_user
-from app.config.di import get_portfolio_service
-from app.services.portfolio_service import PortfolioService
-from app.api.v1.schemas.portfolio_schema import (
-    # 관심종목 관련
+from app.config.di import get_watchlist_service
+from app.services.watchlist_service import WatchListService
+from app.api.v1.schemas.watchlist_schema import (
     WatchListCreate,
     WatchListUpdate,
     WatchListResponse,
     WatchListWithStockResponse,
     WatchListListResponse,
-    # 디렉토리 관련
     WatchlistDirectoryCreate,
     WatchlistDirectoryUpdate,
     WatchlistDirectoryResponse,
@@ -33,7 +31,7 @@ router = APIRouter()
 async def create_watchlist_directory(
     directory_data: WatchlistDirectoryCreate,
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """관심종목 디렉토리를 생성합니다."""
     try:
@@ -58,7 +56,7 @@ async def create_watchlist_directory(
 @router.get("/directories/default", response_model=WatchlistDirectoryResponse, summary="기본 관심종목 디렉토리 조회")
 async def get_default_directory(
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """사용자의 기본 관심종목 디렉토리를 조회합니다."""
     try:
@@ -78,7 +76,7 @@ async def get_watchlist_directories(
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(20, ge=1, le=100, description="페이지 크기"),
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """사용자의 관심종목 디렉토리 목록을 조회합니다."""
     try:
@@ -102,7 +100,7 @@ async def get_watchlist_directories(
 async def get_watchlist_directory(
     directory_id: str,
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """관심종목 디렉토리의 상세 정보와 포함된 관심종목 목록을 조회합니다."""
     try:
@@ -130,7 +128,7 @@ async def update_watchlist_directory(
     directory_id: str,
     directory_data: WatchlistDirectoryUpdate,
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """관심종목 디렉토리 정보를 수정합니다."""
     try:
@@ -162,7 +160,7 @@ async def update_watchlist_directory(
 async def delete_watchlist_directory(
     directory_id: str,
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """관심종목 디렉토리를 삭제합니다. 디렉토리 내 관심종목은 기본 카테고리로 이동됩니다."""
     try:
@@ -188,7 +186,7 @@ async def delete_watchlist_directory(
 async def add_to_watchlist(
     watchlist_data: WatchListCreate,
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """관심종목을 추가합니다."""
     try:
@@ -218,7 +216,7 @@ async def get_watchlist(
     directory_id: Optional[str] = Query(None, description="디렉토리 ID 필터"),
     category: Optional[str] = Query(None, description="카테고리 필터 (구버전 호환)"),
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """관심종목 목록을 조회합니다."""
     try:
@@ -244,7 +242,7 @@ async def update_watchlist(
     watchlist_id: str,
     watchlist_data: WatchListUpdate,
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """관심종목 정보를 수정합니다."""
     try:
@@ -271,7 +269,7 @@ async def update_watchlist(
 async def remove_from_watchlist(
     watchlist_id: str,
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """관심종목을 삭제합니다."""
     try:
@@ -296,7 +294,7 @@ async def reorder_watchlist(
     watchlist_id: str,
     new_order: int = Query(..., description="새로운 순서"),
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """관심종목의 표시 순서를 변경합니다."""
     try:
@@ -320,7 +318,7 @@ async def reorder_watchlist(
 @router.get("/categories", response_model=list[dict], summary="관심종목 카테고리 목록")
 async def get_watchlist_categories(
     current_user_id: str = Depends(get_current_user),
-    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+    portfolio_service: WatchListService = Depends(get_watchlist_service)
 ):
     """사용자의 관심종목 카테고리 목록을 조회합니다 (구버전 호환)."""
     try:

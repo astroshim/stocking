@@ -29,6 +29,8 @@ class DataConverters:
             'id': watchlist.id,
             'user_id': watchlist.user_id,
             'product_code': watchlist.product_code,
+            'product_name': getattr(watchlist, 'product_name', None),
+            'market': getattr(watchlist, 'market', None),
             'directory_id': watchlist.directory_id,
             'add_date': watchlist.add_date,
             'target_price': watchlist.target_price,

@@ -41,6 +41,8 @@ class WatchList(UUIDMixin, Base):
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, comment='사용자 ID')
     directory_id = Column(String(41), ForeignKey('watchlist_directories.id'), nullable=True, comment='디렉토리 ID')
     product_code = Column(String(20), nullable=False, comment='상품 코드 (주식, 코인 등 - 예: 097230, BTC-KRW)')
+    product_name = Column(String(100), nullable=False, comment='상품명 (삼성전자, Apple Inc., 비트코인)')
+    market = Column(String(50), nullable=False, comment='시장/거래소 (KOSPI, NYSE, NASDAQ, Upbit)')
     
     # 관심 종목 정보
     add_date = Column(DateTime, nullable=False, default=datetime.now, comment='추가일')

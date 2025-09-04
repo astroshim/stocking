@@ -64,7 +64,7 @@ class StockPriceDetailsResponse(BaseModel):
     result: List[StockPriceDetail] = Field(..., description="종목 가격 상세 정보 리스트")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 # 미국주식 예제
                 "result": [

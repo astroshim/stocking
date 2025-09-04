@@ -11,7 +11,8 @@ from app.services.service_factory import (
     portfolio_service_factory,
     balance_service_factory,
     order_service_factory,
-    transaction_service_factory
+    transaction_service_factory,
+    watchlist_service_factory
 )
 from app.db.repositories.routine_marketing_repository import RoutineMarketingRepository
 from app.services.routine_marketing_service import RoutineMarketingService
@@ -67,6 +68,10 @@ def get_order_service(db: Session = Depends(get_db)):
 def get_transaction_service(db: Session = Depends(get_db)):
     """TransactionService dependency"""
     return transaction_service_factory(db) 
+
+def get_watchlist_service(db: Session = Depends(get_db)):
+    """WatchListService dependency"""
+    return watchlist_service_factory(db)
 
 def get_routine_marketing_service(db: Session = Depends(get_db)):
     """RoutineMarketingService dependency"""
