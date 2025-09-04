@@ -89,15 +89,15 @@ async def get_portfolio_analysis(
         raise HTTPException(status_code=500, detail=f"포트폴리오 분석 조회 실패: {str(e)}")
 
 
-@router.get("/stock/{stock_id}", response_model=PortfolioWithStockResponse, summary="종목별 포트폴리오 조회")
+@router.get("/product/{product_code}", response_model=PortfolioWithStockResponse, summary="종목별 포트폴리오 조회")
 async def get_portfolio_by_stock(
-    stock_id: str,
+    product_code: str,
     current_user_id: str = Depends(get_current_user),
     portfolio_service: PortfolioService = Depends(get_portfolio_service)
 ):
     """특정 종목의 포트폴리오 정보를 조회합니다."""
     try:
-        portfolio_data = portfolio_service.get_portfolio_by_stock(current_user_id, stock_id)
+        portfolio_data = portfolio_service.get_portfolio_by_stock(current_user_id, product_code)
         
         if not portfolio_data:
             raise HTTPException(status_code=404, detail="포트폴리오를 찾을 수 없습니다")

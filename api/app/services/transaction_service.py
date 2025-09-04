@@ -31,7 +31,10 @@ class TransactionService:
         price: Decimal,
         commission: Decimal,
         tax: Decimal,
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        currency: Optional[str] = None,
+        exchange_rate: Optional[Decimal] = None,
+        krw_execution_amount: Optional[Decimal] = None,
     ) -> Transaction:
         """주문에서 거래 내역 생성"""
         # 가상 잔고 조회
@@ -39,8 +42,12 @@ class TransactionService:
         if not virtual_balance:
             raise ValueError("가상 잔고를 찾을 수 없습니다")
         
-        # 거래 금액 계산
-        amount = quantity * price
+        # 거래 금액 계산 (해외자산은 KRW 기준으로 기록)
+        if currency and currency != 'KRW':
+            rate = exchange_rate or Decimal('0')
+            amount = krw_execution_amount if krw_execution_amount is not None else (quantity * price * rate)
+        else:
+            amount = quantity * price
         
         # 거래 전 잔고
         cash_balance_before = virtual_balance.cash_balance
@@ -52,6 +59,12 @@ class TransactionService:
             cash_balance_after = cash_balance_before + amount - commission - tax
         
         # 거래 내역 생성
+        # 설명 보강(해외자산 환율 표시)
+        desc = description or f"{transaction_type.value} {quantity}주 @ {price}"
+        if currency and currency != 'KRW':
+            if exchange_rate:
+                desc = f"{desc} (환율: {exchange_rate} {currency}->KRW)"
+
         transaction = self.transaction_repo.create_transaction(
             user_id=user_id,
             transaction_type=transaction_type,
@@ -64,7 +77,7 @@ class TransactionService:
             tax=tax,
             cash_balance_before=cash_balance_before,
             cash_balance_after=cash_balance_after,
-            description=description or f"{transaction_type.value} {quantity}주 @ {price}"
+            description=desc
         )
         
         return transaction
@@ -149,26 +162,8 @@ class TransactionService:
             end_date=end_date
         )
         
-        # 거래 내역 데이터 변환
-        transaction_data = []
-        for transaction in transactions:
-            transaction_data.append({
-                'id': transaction.id,
-                'transaction_type': transaction.transaction_type.value,
-                'stock_id': transaction.stock_id,
-                'stock_name': f"주식 {transaction.stock_id}" if transaction.stock_id else None,
-                'quantity': transaction.quantity,
-                'price': float(transaction.price) if transaction.price else None,
-                'amount': float(transaction.amount),
-                'commission': float(transaction.commission),
-                'tax': float(transaction.tax),
-                'net_amount': float(transaction.net_amount),
-                'cash_balance_before': float(transaction.cash_balance_before),
-                'cash_balance_after': float(transaction.cash_balance_after),
-                'transaction_date': transaction.transaction_date.isoformat(),
-                'description': transaction.description,
-                'reference_number': transaction.reference_number
-            })
+        # 거래 내역 데이터 변환 (스키마 필드 준수)
+        transaction_data = [self._to_transaction_dict(t) for t in transactions]
         
         return SimplePage(items=transaction_data, page=page, per_page=size, has_next=offset + size < total_count)
 
@@ -179,12 +174,33 @@ class TransactionService:
         if not transaction:
             return None
         
+        return self._to_transaction_dict(transaction)
+
+    # ===== 내부 헬퍼 =====
+    def _to_order_brief(self, order) -> Optional[Dict[str, Any]]:
+        if not order:
+            return None
+        return {
+            'id': order.id,
+            'product_code': getattr(order, 'product_code', None),
+            'product_name': getattr(order, 'product_name', None),
+            'market': getattr(order, 'market', None),
+            'order_type': order.order_type.value if getattr(order, 'order_type', None) else None,
+            'order_method': order.order_method.value if getattr(order, 'order_method', None) else None,
+            'currency': getattr(order, 'currency', None),
+            'exchange_rate': getattr(order, 'exchange_rate', None),
+            'order_price': getattr(order, 'order_price', None),
+            'krw_order_price': getattr(order, 'krw_order_price', None),
+        }
+
+    def _to_transaction_dict(self, transaction: Transaction) -> Dict[str, Any]:
         return {
             'id': transaction.id,
+            'user_id': transaction.user_id,
+            'order_id': transaction.order_id,
             'transaction_type': transaction.transaction_type.value,
             'stock_id': transaction.stock_id,
             'stock_name': f"주식 {transaction.stock_id}" if transaction.stock_id else None,
-            'order_id': transaction.order_id,
             'quantity': transaction.quantity,
             'price': float(transaction.price) if transaction.price else None,
             'amount': float(transaction.amount),
@@ -193,12 +209,13 @@ class TransactionService:
             'net_amount': float(transaction.net_amount),
             'cash_balance_before': float(transaction.cash_balance_before),
             'cash_balance_after': float(transaction.cash_balance_after),
-            'transaction_date': transaction.transaction_date.isoformat(),
-            'settlement_date': transaction.settlement_date.isoformat() if transaction.settlement_date else None,
+            'transaction_date': transaction.transaction_date,
+            'settlement_date': transaction.settlement_date,
             'description': transaction.description,
             'reference_number': transaction.reference_number,
             'is_simulated': transaction.is_simulated,
-            'created_at': transaction.created_at.isoformat()
+            'created_at': transaction.created_at,
+            'order': self._to_order_brief(getattr(transaction, 'order', None)),
         }
 
     def update_daily_statistics(self, user_id: str, as_of: Optional[datetime] = None) -> None:

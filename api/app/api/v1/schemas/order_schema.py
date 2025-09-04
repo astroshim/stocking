@@ -48,7 +48,9 @@ class OrderCancel(BaseModel):
 class OrderResponse(InitVarModel):
     id: str
     user_id: str
-    stock_id: str
+    product_code: str
+    product_name: str
+    market: str
     order_type: OrderType
     order_method: OrderMethod
     order_status: OrderStatus = Field(
@@ -60,9 +62,16 @@ class OrderResponse(InitVarModel):
     executed_quantity: Decimal
     executed_amount: Decimal
     average_price: Optional[Decimal]
+    # 환율 및 통화 정보
+    currency: str
+    exchange_rate: Optional[Decimal]
+    krw_order_price: Optional[Decimal]
+    krw_executed_amount: Optional[Decimal]
+    # 수수료/세금
     commission: Decimal
     tax: Decimal
     total_fee: Decimal
+    # 시간/메모
     order_date: datetime
     executed_date: Optional[datetime]
     cancelled_date: Optional[datetime]

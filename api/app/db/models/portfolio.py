@@ -39,10 +39,6 @@ class Portfolio(UUIDMixin, Base):
     average_exchange_rate = Column(Numeric(10, 4), nullable=True, comment='평균 매수 시점 환율 (외화 -> KRW)')
     krw_average_price = Column(Numeric(20, 2), nullable=True, comment='원화 환산 평균 매수가')
     
-    # 손익 정보 (확정값만 저장)
-    realized_profit_loss = Column(Numeric(20, 8), nullable=False, default=0, comment='실현 손익 (현지통화 기준)')
-    krw_realized_profit_loss = Column(Numeric(20, 2), nullable=False, default=0, comment='실현 손익 (원화 환산)')
-    
     # 시간 정보
     first_buy_date = Column(DateTime, nullable=False, comment='최초 매수일')
     last_buy_date = Column(DateTime, nullable=True, comment='최근 매수일')
@@ -57,6 +53,7 @@ class Portfolio(UUIDMixin, Base):
 
     # 관계 설정
     user = relationship('User', back_populates='portfolios')
+    orders = relationship('Order', back_populates='portfolio', passive_deletes=True)
 
     def __repr__(self):
         asset_type = "shares" if self.product_type == ProductType.STOCK else "units"

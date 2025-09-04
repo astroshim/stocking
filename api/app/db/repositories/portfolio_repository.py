@@ -23,30 +23,45 @@ class PortfolioRepository(BaseRepository):
         return query.order_by(desc(Portfolio.updated_at)).all()
 
     def get_by_user_and_stock(self, user_id: str, stock_id: str) -> Optional[Portfolio]:
-        """사용자의 특정 종목 포트폴리오 조회"""
+        """사용자의 특정 종목 포트폴리오 조회 (stock_id 호환: product_code로 조회)"""
         return self.session.query(Portfolio).filter(
             and_(
                 Portfolio.user_id == user_id,
-                Portfolio.stock_id == stock_id
+                Portfolio.product_code == stock_id
             )
         ).first()
 
     def create_portfolio(
         self,
         user_id: str,
-        stock_id: str,
+        product_code: str,
         quantity: int,
-        average_price: Decimal
+        average_price: Decimal,
+        product_name: Optional[str] = None,
+        market: Optional[str] = None,
+        product_type: Optional[object] = None,
+        symbol: Optional[str] = None,
+        base_currency: Optional[str] = None,
+        average_exchange_rate: Optional[Decimal] = None,
+        krw_average_price: Optional[Decimal] = None,
     ) -> Portfolio:
-        """새 포트폴리오 생성"""
+        """새 포트폴리오 생성 (product_code 기반)"""
         from datetime import datetime
+        from app.db.models.portfolio import ProductType as _PT
         
         now = datetime.now()
         portfolio = Portfolio(
             user_id=user_id,
-            stock_id=stock_id,
+            product_code=product_code,
+            product_name=product_name or product_code,
+            market=market or "UNKNOWN",
+            product_type=product_type or _PT.STOCK,
+            symbol=symbol,
+            base_currency=base_currency,
             current_quantity=quantity,
             average_price=average_price,
+            average_exchange_rate=average_exchange_rate,
+            krw_average_price=krw_average_price,
             first_buy_date=now,
             last_buy_date=now,
             last_updated_at=now
@@ -85,10 +100,8 @@ class PortfolioRepository(BaseRepository):
         if portfolio.current_quantity < quantity:
             raise ValueError("보유 수량이 부족합니다")
         
-        # 실현 손익 계산 (매도 가격 - 기존 평단) * 수량
-        realized_profit_loss = (price - portfolio.average_price) * quantity
+        # 수량 차감 (실현 손익은 트랜잭션에서 관리)
         portfolio.current_quantity -= quantity
-        portfolio.realized_profit_loss += realized_profit_loss
         
         # 현재 수량이 0이 되면 평균 단가 초기화
         if portfolio.current_quantity == 0:
@@ -180,8 +193,8 @@ class PortfolioRepository(BaseRepository):
             )
             
             holdings.append({
-                'stock_code': portfolio.stock_id,  # stock_id 사용
-                'stock_name': f"주식 {portfolio.stock_id}",  # 임시 이름
+                'product_code': portfolio.product_code,
+                'product_name': portfolio.product_name,
                 'quantity': portfolio.current_quantity,
                 'current_value': current_value,
                 'profit_loss': profit_loss,

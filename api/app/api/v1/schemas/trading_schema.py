@@ -16,6 +16,18 @@ class TransactionTypeEnum(str, Enum):
     WITHDRAW = "WITHDRAW"
     FEE = "FEE"
     TAX = "TAX"
+class OrderBriefResponse(InitVarModel):
+    id: str
+    product_code: str
+    product_name: str
+    market: str
+    order_type: str
+    order_method: str
+    currency: str
+    exchange_rate: Optional[Decimal]
+    order_price: Optional[Decimal]
+    krw_order_price: Optional[Decimal]
+
 
 
 class TransactionResponse(InitVarModel):
@@ -38,6 +50,7 @@ class TransactionResponse(InitVarModel):
     reference_number: Optional[str]
     is_simulated: bool
     created_at: datetime
+    order: Optional[OrderBriefResponse]
 
 
 class TransactionListResponse(PagedResponse[TransactionResponse]):

@@ -72,17 +72,18 @@ class DataConverters:
             if invested_amount > 0 else Decimal('0')
         )
 
-        return {
+        data = {
             'id': portfolio.id,
             'user_id': portfolio.user_id,
-            'stock_id': portfolio.stock_id,
+            'product_code': portfolio.product_code,
+            'product_name': portfolio.product_name,
+            'market': portfolio.market,
             'quantity': portfolio.current_quantity,
             'average_buy_price': portfolio.average_price,
             'total_buy_amount': portfolio.current_quantity * portfolio.average_price,
             'current_value': current_value,
             'unrealized_profit_loss': unrealized_profit_loss,
             'unrealized_profit_loss_rate': unrealized_profit_loss_rate,
-            'realized_profit_loss': portfolio.realized_profit_loss,
             'first_buy_date': portfolio.first_buy_date,
             'last_buy_date': portfolio.last_buy_date,
             'last_sell_date': portfolio.last_sell_date,
@@ -91,9 +92,30 @@ class DataConverters:
             'notes': portfolio.notes,
             'created_at': portfolio.created_at,
             'updated_at': portfolio.updated_at,
-            'stock_name': f"주식 {portfolio.stock_id}",
             'current_price': current_price,
         }
+
+        # 주문 목록 변환 (간략 정보)
+        try:
+            orders = []
+            if hasattr(portfolio, 'orders') and portfolio.orders:
+                for o in portfolio.orders:
+                    orders.append({
+                        'id': o.id,
+                        'order_type': o.order_type,
+                        'order_method': o.order_method,
+                        'order_status': o.order_status,
+                        'quantity': o.quantity,
+                        'order_price': o.order_price,
+                        'currency': getattr(o, 'currency', 'KRW'),
+                        'exchange_rate': getattr(o, 'exchange_rate', None),
+                        'created_at': o.created_at,
+                    })
+            data['orders'] = orders
+        except Exception:
+            data['orders'] = []
+
+        return data
     
     @staticmethod
     def convert_directory_to_dict(

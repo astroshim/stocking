@@ -82,9 +82,9 @@ class PortfolioService:
             'risk_metrics': risk_metrics
         }
 
-    def get_portfolio_by_stock(self, user_id: str, stock_id: str) -> Optional[Dict[str, Any]]:
-        """특정 종목 포트폴리오 조회"""
-        portfolio = self.portfolio_repo.get_by_user_and_stock(user_id, stock_id)
+    def get_portfolio_by_stock(self, user_id: str, product_code: str) -> Optional[Dict[str, Any]]:
+        """특정 종목 포트폴리오 조회 (product_code 기반)"""
+        portfolio = self.portfolio_repo.get_by_user_and_stock(user_id, product_code)
         
         if not portfolio:
             return None

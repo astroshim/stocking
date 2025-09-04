@@ -111,6 +111,10 @@ class TossProxyService:
         params = {"productCodes": f"{product_code}"}
         return self.proxy_get("/api/v3/stock-prices/details", params=params)
     
+    def get_stock_overview(self, product_code: str) -> Dict[str, Any]:
+        """종목 주요정보 조회"""
+        return self.proxy_get(f"/api/v2/stock-infos/{product_code}/overview")
+
     def get_exchange_rate(self, from_currency: str, to_currency: str = 'KRW') -> Decimal:
         """
         환율을 조회합니다.
@@ -184,36 +188,3 @@ class TossProxyService:
                 raise
             raise ValidationError(f"Toss API 환율 조회 실패: {str(e)}")
     
-    # def convert_currency(
-    #     self, 
-    #     amount: Decimal, 
-    #     from_currency: str, 
-    #     to_currency: str = 'KRW'
-    # ) -> Decimal:
-    #     """
-    #     통화를 변환합니다.
-        
-    #     Args:
-    #         amount: 변환할 금액
-    #         from_currency: 기준 통화
-    #         to_currency: 목표 통화
-            
-    #     Returns:
-    #         변환된 금액
-    #     """
-    #     if from_currency == to_currency:
-    #         return amount
-            
-    #     exchange_rate = self.get_exchange_rate(from_currency, to_currency)
-    #     converted_amount = amount * exchange_rate
-        
-    #     logging.info(f"통화 변환: {amount} {from_currency} = {converted_amount} {to_currency} (환율: {exchange_rate})")
-    #     return converted_amount
-    
-    # def get_supported_currencies(self) -> list:
-    #     """지원하는 통화 목록을 반환합니다."""
-    #     return ['KRW', 'USD', 'EUR', 'JPY', 'CNY', 'GBP', 'CAD', 'AUD', 'SGD', 'HKD']
-    
-    # def validate_currency(self, currency: str) -> bool:
-    #     """통화 코드가 유효한지 확인합니다."""
-    #     return currency.upper() in self.get_supported_currencies()

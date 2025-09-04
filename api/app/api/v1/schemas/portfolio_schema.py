@@ -6,6 +6,7 @@ from enum import Enum
 
 from app.api.schemas.common_pagenation import PagedResponse
 from app.api.schemas.init_var_model import InitVarModel
+from app.db.models.order import OrderType, OrderMethod, OrderStatus
 
 
 class BalanceChangeTypeEnum(str, Enum):
@@ -20,14 +21,15 @@ class BalanceChangeTypeEnum(str, Enum):
 class PortfolioResponse(InitVarModel):
     id: str
     user_id: str
-    stock_id: str
+    product_code: str
+    product_name: str
+    market: str
     quantity: Decimal
     average_buy_price: Decimal
     total_buy_amount: Decimal
     current_value: Optional[Decimal]
     unrealized_profit_loss: Optional[Decimal]
     unrealized_profit_loss_rate: Optional[Decimal]
-    realized_profit_loss: Decimal
     first_buy_date: datetime
     last_buy_date: Optional[datetime]
     last_sell_date: Optional[datetime]
@@ -39,8 +41,20 @@ class PortfolioResponse(InitVarModel):
 
 
 class PortfolioWithStockResponse(PortfolioResponse):
-    stock_name: Optional[str] = Field(None, description="주식 종목명")
     current_price: Optional[Decimal] = Field(None, description="현재가")
+    orders: List['OrderBriefInPortfolio'] = Field(default_factory=list, description="해당 포트폴리오의 주문 목록")
+
+
+class OrderBriefInPortfolio(InitVarModel):
+    id: str
+    order_type: OrderType
+    order_method: OrderMethod
+    order_status: OrderStatus
+    quantity: Decimal
+    order_price: Optional[Decimal]
+    currency: str
+    exchange_rate: Optional[Decimal]
+    created_at: datetime
 
 
 class PortfolioListResponse(PagedResponse[PortfolioWithStockResponse]):

@@ -48,10 +48,20 @@ class OrderService:
             
             # 모델 호환성: stock_id -> product_code 매핑 및 기본 상품 정보 설정
             order_data['product_code'] = stock_id
-            # product_name, market은 응답에서 유추하거나 기본값 사용
-            # price_data는 _fetch_price_and_currency 내부에서만 사용되므로 market/이름은 입력값 기반으로 처리
-            order_data['product_name'] = order_data.get('product_name') or stock_id
-            order_data['market'] = order_data.get('market') or 'UNKNOWN'
+            # 종목 개요 조회로 product_name, market(한국어 우선) 설정
+            try:
+                overview_raw = self.toss_proxy_service.get_stock_overview(stock_id)
+                ov = overview_raw.get('result') if isinstance(overview_raw, dict) else None
+                company = (ov or {}).get('company', {}) if isinstance(ov, dict) else {}
+                market_info = (ov or {}).get('market', {}) if isinstance(ov, dict) else {}
+                product_name = company.get('fullName') or company.get('name') or order_data.get('product_name') or stock_id
+                market_display = market_info.get('displayName') or market_info.get('code') or order_data.get('market') or 'UNKNOWN'
+                order_data['product_name'] = product_name
+                order_data['market'] = market_display
+            except Exception:
+                # 실패 시 기본값 유지
+                order_data['product_name'] = order_data.get('product_name') or stock_id
+                order_data['market'] = order_data.get('market') or 'UNKNOWN'
             # 더 이상 모델에 없는 필드는 제거
             if 'stock_id' in order_data:
                 order_data.pop('stock_id')
@@ -76,8 +86,11 @@ class OrderService:
                     # 이유: 실제 체결 가격을 알 수 없어 정확한 예약이 불가능
                     logging.info(f"시장가 매수 주문은 체결 시 실시간 잔고 검증 - User: {user_id}")
             elif order_data['order_type'] == OrderType.SELL:
-                # 매도 주문: 보유 주식 수량 검증 (예약된 수량 고려)
-                self._validate_sell_order(user_id, order_data)
+                # 매도 주문: 지정가만 사전 검증, 시장가는 체결 직전 검증으로 위임
+                if order_data['order_method'] == OrderMethod.LIMIT:
+                    self._validate_sell_order(user_id, order_data)
+                else:
+                    logging.info(f"시장가 매도 주문은 체결 시 실시간 보유 수량 검증 - User: {user_id}")
             
             # 주문 생성
             order = self.order_repository.create_order(order_data)
@@ -283,50 +296,16 @@ class OrderService:
         logging.info(f"잔고 예약 완료 - 예약 후 가용 잔고: {virtual_balance.available_cash:,.0f}원")
 
     def _validate_sell_order(self, user_id: str, order_data: Dict[str, Any]) -> None:
-        """
-        매도 주문을 검증합니다.
-        
-        Args:
-            user_id: 사용자 ID
-            order_data: 주문 데이터 (product_code/stock_id, quantity 포함)
-            
-        Raises:
-            ValidationError: 보유 주식 부족 시
-        """
+        """매도 주문 검증(사전 검증용). 시장가는 실행 시점 검증으로 위임."""
         stock_id = order_data.get('product_code') or order_data['stock_id']
-        sell_quantity = order_data['quantity']
-        order_price = order_data.get('order_price', 0)
-        
-        # 포트폴리오에서 보유 수량 확인
-        portfolio = self.portfolio_repository.get_by_user_and_stock(user_id, stock_id)
-
-        if not portfolio or not portfolio.is_active:
-            raise ValidationError(f"종목 {stock_id}을(를) 보유하고 있지 않습니다")
-        
-        # 대기/부분체결 SELL 주문의 잔여 수량 예약치를 반영하여 검증
-        reserved_quantity = self.order_repository.get_pending_sell_reserved_quantity(user_id, stock_id)
-        available_to_sell = portfolio.current_quantity - reserved_quantity
-        
-        # 로깅: 매도 주문 정보
-        self._log_order_info(
-            action="매도 주문 검증",
+        self._assert_sell_quantity_available(
             user_id=user_id,
             product_code=stock_id,
-            quantity=sell_quantity,
-            price=order_price
+            requested_quantity=order_data['quantity'],
+            price=order_data.get('order_price', 0),
+            exclude_order_id=None,
+            currency=order_data.get('currency', 'KRW'),
         )
-        logging.info(f"보유 수량: {portfolio.current_quantity}, 예약 수량: {reserved_quantity}, "
-                    f"매도 가능 수량: {available_to_sell}")
-        
-        if available_to_sell < sell_quantity:
-            raise ValidationError(
-                f"매도 가능 수량이 부족합니다. "
-                f"매도 요청: {sell_quantity}주, "
-                f"매도 가능: {available_to_sell}주 "
-                f"(보유: {portfolio.current_quantity}주 - 예약: {reserved_quantity}주)"
-            )
-            
-        logging.info(f"매도 주문 검증 완료 - 종목: {stock_id}, 매도 수량: {sell_quantity}주")
 
     def _execute_market_order(self, order: Order) -> None:
         """시장가 주문을 즉시 체결합니다.
@@ -380,27 +359,15 @@ class OrderService:
                 )
                 
         elif order.order_type == OrderType.SELL:
-            # 매도: 보유 주식 수량 재검증 (pending 주문 고려)
-            product_code = self._get_product_code(order)
-            portfolio = self.portfolio_repository.get_by_user_and_stock(order.user_id, product_code)
-            if not portfolio or not portfolio.is_active:
-                raise ValidationError(f"해당 자산을 보유하고 있지 않습니다: {product_code} ({order.product_name})")
-            
-            pending_sell_reserved = self.order_repository.get_pending_sell_reserved_quantity(
-                order.user_id, product_code
+            # 매도: 실행 직전 보유 수량 재검증(자기 자신 주문 제외)
+            self._assert_sell_quantity_available(
+                user_id=order.user_id,
+                product_code=self._get_product_code(order),
+                requested_quantity=order.quantity,
+                price=order.order_price or Decimal('0'),
+                exclude_order_id=order.id,
+                currency=order.currency or 'KRW',
             )
-            available_to_sell = portfolio.current_quantity - pending_sell_reserved
-            
-            if order.quantity > available_to_sell:
-                asset_type = "주" if order.currency == 'KRW' else "units"
-                logging.error(f"Market sell order validation failed - User: {order.user_id}, "
-                            f"Product: {product_code}, Requested: {order.quantity}, Available: {available_to_sell}, "
-                            f"Owned: {portfolio.current_quantity}, Reserved: {pending_sell_reserved}")
-                raise ValidationError(
-                    f"매도 가능한 수량이 부족합니다. 요청: {order.quantity}{asset_type}, "
-                    f"매도 가능: {available_to_sell}{asset_type} "
-                    f"(보유: {portfolio.current_quantity}{asset_type} - 예약: {pending_sell_reserved}{asset_type})"
-                )
         
         # 시장가 주문 검증 통과 로그
         logging.info(f"Market order validation passed - Order: {order.id}, "
@@ -445,34 +412,49 @@ class OrderService:
         execution_amount = execution.execution_amount
 
         if order.order_type == OrderType.BUY:
-            # 실행된 부분에 대한 예상 수수료(예약 시점과 동일한 방식)과 실제 수수료 비교
-            expected_commission = self._calculate_commission(execution_amount)
-            expected_tax = Decimal('0')  # 매수 시 세금 없음
+            # 금액 단위 통일: KRW 기준으로 실행 금액 산정
+            if (order.currency or 'KRW') == 'KRW':
+                executed_amount_krw = execution.execution_amount
+            else:
+                executed_amount_krw = getattr(execution, 'krw_execution_amount', None)
+                if executed_amount_krw is None and order.exchange_rate:
+                    executed_amount_krw = execution.execution_amount * order.exchange_rate
+                executed_amount_krw = executed_amount_krw or Decimal('0')
 
-            actual_commission = execution.execution_fee
-            actual_tax = self._calculate_tax(execution_amount, order.order_type)
-
-            reserved_for_executed = execution_amount + expected_commission + expected_tax
-            actual_for_executed = execution_amount + actual_commission + actual_tax
-            difference = reserved_for_executed - actual_for_executed
+            actual_commission_krw = Decimal('0')  # 현재 수수료 0 정책
+            actual_tax_krw = Decimal('0')         # 매수 시 세금 없음
+            actual_for_executed_krw = executed_amount_krw + actual_commission_krw + actual_tax_krw
 
             virtual_balance = self.virtual_balance_repository.get_by_user_id(order.user_id)
-            # 예약 환불(차액만큼 반환) + 실제 현금 차감
+
+            # LIMIT: 예약환불(실행분) + 실제 결제 차감
+            # MARKET: 예약 없음 → 실제 결제만큼 가용/현금 동시 차감
             previous_cash = virtual_balance.cash_balance
-            virtual_balance.available_cash += difference
-            virtual_balance.cash_balance -= actual_for_executed
+
+            if order.order_method == OrderMethod.LIMIT:
+                # 예약 단가: 주문 시점 원화 주문가 사용
+                per_unit_reserved_krw = order.krw_order_price or order.order_price or Decimal('0')
+                reserved_for_executed_krw = per_unit_reserved_krw * execution.execution_quantity
+                difference = reserved_for_executed_krw - actual_for_executed_krw
+                virtual_balance.available_cash += difference
+            else:
+                # 시장가 매수: 사전 예약 없음 → 실제 결제만큼 가용 현금도 감소
+                virtual_balance.available_cash -= actual_for_executed_krw
+
+            # 현금 잔고는 실제 결제금액만큼 감소
+            virtual_balance.cash_balance -= actual_for_executed_krw
             # 총계 누적 및 원가(=체결금액) 투자 증가
-            virtual_balance.total_buy_amount += execution_amount
-            virtual_balance.total_commission += (actual_commission or Decimal('0'))
-            virtual_balance.total_tax += (actual_tax or Decimal('0'))
-            virtual_balance.invested_amount += execution_amount
+            virtual_balance.total_buy_amount += executed_amount_krw
+            virtual_balance.total_commission += actual_commission_krw
+            virtual_balance.total_tax += actual_tax_krw
+            virtual_balance.invested_amount += executed_amount_krw
             # 이력 기록 (BUY)
             try:
                 self.virtual_balance_repository._add_balance_history(
                     virtual_balance_id=virtual_balance.id,
                     previous_cash=previous_cash,
                     new_cash=virtual_balance.cash_balance,
-                    change_amount=-actual_for_executed,
+                    change_amount=-actual_for_executed_krw,
                     change_type='BUY',
                     related_order_id=order.id,
                     description=f"BUY executed: {execution.execution_quantity} @ {execution.execution_price}"
@@ -481,26 +463,35 @@ class OrderService:
                 pass
 
         elif order.order_type == OrderType.SELL:
-            # 매도: 실행 금액에서 수수료/세금 차감한 순입금 처리
-            actual_commission = execution.execution_fee
-            actual_tax = self._calculate_tax(execution_amount, order.order_type)
-            net_amount = execution_amount - actual_commission - actual_tax
+            # 매도: 실행 금액에서 수수료/세금 차감한 순입금 처리 (항상 KRW 기준)
+            if (order.currency or 'KRW') == 'KRW':
+                executed_amount_krw = execution.execution_amount
+                commission_krw = execution.execution_fee or Decimal('0')
+            else:
+                rate = order.exchange_rate or self.toss_proxy_service.get_exchange_rate(order.currency)
+                executed_amount_krw = getattr(execution, 'krw_execution_amount', None)
+                if executed_amount_krw is None:
+                    executed_amount_krw = (execution.execution_amount or Decimal('0')) * rate
+                commission_krw = (execution.execution_fee or Decimal('0')) * rate
+
+            tax_krw = self._calculate_tax(executed_amount_krw, order.order_type)
+            net_amount_krw = executed_amount_krw - commission_krw - tax_krw
 
             virtual_balance = self.virtual_balance_repository.get_by_user_id(order.user_id)
             previous_cash = virtual_balance.cash_balance
-            virtual_balance.cash_balance += net_amount
-            virtual_balance.available_cash += net_amount
-            # 총계 누적
-            virtual_balance.total_sell_amount += execution_amount
-            virtual_balance.total_commission += (actual_commission or Decimal('0'))
-            virtual_balance.total_tax += (actual_tax or Decimal('0'))
+            virtual_balance.cash_balance += net_amount_krw
+            virtual_balance.available_cash += net_amount_krw
+            # 총계 누적 (KRW 기준)
+            virtual_balance.total_sell_amount += executed_amount_krw
+            virtual_balance.total_commission += commission_krw
+            virtual_balance.total_tax += tax_krw
             # 이력 기록 (SELL)
             try:
                 self.virtual_balance_repository._add_balance_history(
                     virtual_balance_id=virtual_balance.id,
                     previous_cash=previous_cash,
                     new_cash=virtual_balance.cash_balance,
-                    change_amount=net_amount,
+                    change_amount=net_amount_krw,
                     change_type='SELL',
                     related_order_id=order.id,
                     description=f"SELL executed: {execution.execution_quantity} @ {execution.execution_price}"
@@ -548,8 +539,29 @@ class OrderService:
                 # 기존 포트폴리오가 있는 경우 매수 업데이트
                 self.portfolio_repository.update_portfolio_buy(portfolio, quantity, price)
             else:
-                # 새로운 포트폴리오 생성
-                self.portfolio_repository.create_portfolio(user_id, stock_id, quantity, price)
+                # 새로운 포트폴리오 생성 (상품/환율 정보 포함)
+                average_exchange_rate = None
+                krw_average_price = None
+                if order.currency and order.currency != 'KRW' and order.exchange_rate:
+                    try:
+                        average_exchange_rate = order.exchange_rate
+                        krw_average_price = (price or Decimal('0')) * order.exchange_rate
+                    except Exception:
+                        average_exchange_rate = None
+                        krw_average_price = None
+
+                portfolio = self.portfolio_repository.create_portfolio(
+                    user_id=user_id,
+                    product_code=stock_id,
+                    quantity=quantity,
+                    average_price=price,
+                    product_name=getattr(order, 'product_name', None) or stock_id,
+                    market=getattr(order, 'market', None) or 'UNKNOWN',
+                    base_currency=getattr(order, 'currency', None),
+                    average_exchange_rate=average_exchange_rate,
+                    krw_average_price=krw_average_price,
+                )
+                order.portfolio_id = portfolio.id
                 
         elif order.order_type == OrderType.SELL:
             if portfolio:
@@ -575,6 +587,7 @@ class OrderService:
 
                 # 포트폴리오 수량/평단 업데이트
                 self.portfolio_repository.update_portfolio_sell(portfolio, quantity, price)
+                order.portfolio_id = portfolio.id
                 
                 # 보유 수량이 0이 되면 포트폴리오 삭제
                 if portfolio.current_quantity == 0:
@@ -602,7 +615,10 @@ class OrderService:
             price=execution.execution_price,
             commission=order.commission,
             tax=order.tax,
-            description=f"{order.order_type.value} 주문 체결: {execution.execution_quantity}주 @ {execution.execution_price}"
+            description=f"{order.order_type.value} 주문 체결: {execution.execution_quantity}주 @ {execution.execution_price}",
+            currency=order.currency,
+            exchange_rate=order.exchange_rate,
+            krw_execution_amount=getattr(execution, 'krw_execution_amount', None),
         )
         
         logging.info(f"Transaction created for execution: {transaction.id}")
@@ -615,6 +631,46 @@ class OrderService:
             return order_or_data.product_code or order_or_data.stock_id
         else:
             return order_or_data.get('product_code', order_or_data.get('stock_id', 'Unknown'))
+
+    def _assert_sell_quantity_available(
+        self,
+        user_id: str,
+        product_code: str,
+        requested_quantity: Decimal,
+        price: Decimal,
+        exclude_order_id: Optional[str],
+        currency: str = 'KRW',
+    ) -> None:
+        """매도 가능 수량을 검증합니다(대기/부분체결 예약 수량 반영)."""
+        portfolio = self.portfolio_repository.get_by_user_and_stock(user_id, product_code)
+        if not portfolio or not portfolio.is_active:
+            raise ValidationError(f"해당 자산을 보유하고 있지 않습니다: {product_code}")
+
+        reserved_quantity = self.order_repository.get_pending_sell_reserved_quantity(
+            user_id, product_code, exclude_order_id=exclude_order_id
+        )
+        available_to_sell = portfolio.current_quantity - reserved_quantity
+
+        # 로깅
+        self._log_order_info(
+            action="매도 주문 검증",
+            user_id=user_id,
+            product_code=product_code,
+            quantity=requested_quantity,
+            price=price,
+            currency=currency,
+        )
+        logging.info(
+            f"보유 수량: {portfolio.current_quantity}, 예약 수량: {reserved_quantity}, 매도 가능 수량: {available_to_sell}"
+        )
+
+        if available_to_sell < requested_quantity:
+            asset_type = "주" if currency == 'KRW' else "units"
+            raise ValidationError(
+                f"매도 가능한 수량이 부족합니다. 요청: {requested_quantity}{asset_type}, "
+                f"매도 가능: {available_to_sell}{asset_type} "
+                f"(보유: {portfolio.current_quantity}{asset_type} - 예약: {reserved_quantity}{asset_type})"
+            )
 
     def _fetch_price_and_currency(self, stock_id: str) -> tuple[Decimal, str]:
         """주식 현재가와 통화를 조회하여 반환합니다."""

@@ -40,6 +40,7 @@ class Order(UUIDMixin, Base):
     __tablename__ = 'orders'
 
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, comment='사용자 ID')
+    portfolio_id = Column(String(36), ForeignKey('portfolios.id', ondelete='SET NULL'), nullable=True, index=True, comment='연결된 포트폴리오 ID')
     
     # 상품 정보 (Portfolio와 동일한 구조)
     product_code = Column(String(20), nullable=False, comment='상품 코드 (주식: 005930, 해외주식: AAPL, 코인: BTC-KRW)')
@@ -84,6 +85,7 @@ class Order(UUIDMixin, Base):
 
     # 관계 설정
     user = relationship('User', back_populates='orders')
+    portfolio = relationship('Portfolio', back_populates='orders')
     order_executions = relationship('OrderExecution', back_populates='order', cascade='all, delete-orphan')
     transactions = relationship('Transaction', back_populates='order', cascade='all, delete-orphan')
 
