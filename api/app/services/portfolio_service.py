@@ -25,7 +25,7 @@ class PortfolioService:
         only_active: bool = True
     ) -> SimplePage:
         """사용자 포트폴리오 조회"""
-        portfolios = self.portfolio_repo.get_by_user_id(user_id, only_active)
+        portfolios = self.portfolio_repo.get_by_user_id(user_id, only_active, include_orders=True)
         
         # 페이징 처리
         offset = (page - 1) * size

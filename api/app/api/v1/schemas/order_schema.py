@@ -64,9 +64,10 @@ class OrderResponse(InitVarModel):
     average_price: Optional[Decimal]
     # 환율 및 통화 정보
     currency: str
-    exchange_rate: Optional[Decimal]
-    krw_order_price: Optional[Decimal]
-    krw_executed_amount: Optional[Decimal]
+    exchange_rate: Optional[Decimal] = None
+    krw_order_price: Optional[Decimal] = None
+    krw_executed_amount: Optional[Decimal] = None
+    
     # 수수료/세금
     commission: Decimal
     tax: Decimal

@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, desc, func, extract
 from datetime import datetime, date
 from decimal import Decimal
@@ -27,7 +27,9 @@ class TransactionRepository(BaseRepository):
         tax: Decimal = Decimal('0'),
         cash_balance_before: Decimal = Decimal('0'),
         cash_balance_after: Decimal = Decimal('0'),
-        description: Optional[str] = None
+        description: Optional[str] = None,
+        realized_profit_loss: Optional[Decimal] = None,
+        krw_realized_profit_loss: Optional[Decimal] = None
     ) -> Transaction:
         """거래 내역 생성"""
         net_amount = amount - commission - tax
@@ -47,7 +49,9 @@ class TransactionRepository(BaseRepository):
             cash_balance_after=cash_balance_after,
             description=description,
             transaction_date=datetime.now(),
-            is_simulated=True
+            is_simulated=True,
+            realized_profit_loss=realized_profit_loss,
+            krw_realized_profit_loss=krw_realized_profit_loss
         )
         
         self.session.add(transaction)
@@ -64,8 +68,8 @@ class TransactionRepository(BaseRepository):
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> List[Transaction]:
-        """사용자 거래 내역 조회"""
-        query = self.session.query(Transaction).filter(Transaction.user_id == user_id)
+        """사용자 거래 내역 조회 (N+1 쿼리 방지를 위해 order를 eager loading)"""
+        query = self.session.query(Transaction).options(joinedload(Transaction.order)).filter(Transaction.user_id == user_id)
         
         if transaction_type:
             query = query.filter(Transaction.transaction_type == transaction_type)
@@ -107,8 +111,8 @@ class TransactionRepository(BaseRepository):
         return query.count()
 
     def get_by_id_and_user(self, transaction_id: str, user_id: str) -> Optional[Transaction]:
-        """특정 거래 내역 조회"""
-        return self.session.query(Transaction).filter(
+        """특정 거래 내역 조회 (N+1 쿼리 방지를 위해 order를 eager loading)"""
+        return self.session.query(Transaction).options(joinedload(Transaction.order)).filter(
             and_(
                 Transaction.id == transaction_id,
                 Transaction.user_id == user_id

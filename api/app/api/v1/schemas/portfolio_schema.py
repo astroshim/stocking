@@ -18,8 +18,8 @@ class PortfolioResponse(InitVarModel):
     average_buy_price: Decimal
     total_buy_amount: Decimal
     current_value: Optional[Decimal]
-    unrealized_profit_loss: Optional[Decimal]
-    unrealized_profit_loss_rate: Optional[Decimal]
+    # unrealized_profit_loss: Optional[Decimal]
+    # unrealized_profit_loss_rate: Optional[Decimal]
     first_buy_date: datetime
     last_buy_date: Optional[datetime]
     last_sell_date: Optional[datetime]
@@ -28,6 +28,38 @@ class PortfolioResponse(InitVarModel):
     notes: Optional[str]
     created_at: datetime
     updated_at: datetime
+    average_exchange_rate: Optional[Decimal] = Field(None, description="평균 매수 시점 환율 (외화 -> KRW)")
+    krw_average_price: Optional[Decimal] = Field(None, description="원화 환산 평균 매수가")
+    
+    # 손익 정보
+    realized_profit_loss: Optional[Decimal] = Field(None, description="누적 실현 손익 (현지통화)")
+    krw_realized_profit_loss: Optional[Decimal] = Field(None, description="원화 환산 누적 실현 손익")
+
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "id": "1234567890abcdef1234567890abcdef",
+            "user_id": "user123",
+            "product_code": "AAPL",
+            "product_name": "Apple Inc.",
+            "market": "NASDAQ",
+            "quantity": 10,
+            "average_buy_price": 150.00,
+            "total_buy_amount": 1500.00,
+            "current_value": 160.00,
+            "first_buy_date": "2023-01-01T10:00:00Z",
+            "last_buy_date": "2023-01-05T10:00:00Z",
+            "last_sell_date": None,
+            "last_updated_at": "2023-01-10T10:00:00Z",
+            "is_active": True,
+            "notes": "Some notes",
+            "created_at": "2023-01-01T10:00:00Z",
+            "updated_at": "2023-01-10T10:00:00Z",
+            "average_exchange_rate": 1200.00,
+            "krw_average_price": 180000.00,
+            "realized_profit_loss": 100.00,
+            "krw_realized_profit_loss": 120000.00
+        }
 
 
 class PortfolioWithStockResponse(PortfolioResponse):

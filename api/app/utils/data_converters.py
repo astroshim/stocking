@@ -2,7 +2,10 @@ from typing import Dict, Any, Optional
 from decimal import Decimal
 from datetime import datetime
 
+from app.db.models.user import User
 from app.db.models.watchlist import WatchList, WatchlistDirectory
+from app.db.models.virtual_balance import VirtualBalance, VirtualBalanceHistory
+from app.db.models.order import Order, OrderType
 from app.db.models.portfolio import Portfolio
 
 
@@ -68,11 +71,11 @@ class DataConverters:
 
         current_value = portfolio.current_quantity * current_price
         invested_amount = portfolio.current_quantity * portfolio.average_price
-        unrealized_profit_loss = current_value - invested_amount
-        unrealized_profit_loss_rate = (
-            (unrealized_profit_loss / invested_amount * 100)
-            if invested_amount > 0 else Decimal('0')
-        )
+        # unrealized_profit_loss = current_value - invested_amount
+        # unrealized_profit_loss_rate = (
+        #     (unrealized_profit_loss / invested_amount * 100)
+        #     if invested_amount > 0 else Decimal('0')
+        # )
 
         data = {
             'id': portfolio.id,
@@ -84,8 +87,8 @@ class DataConverters:
             'average_buy_price': portfolio.average_price,
             'total_buy_amount': portfolio.current_quantity * portfolio.average_price,
             'current_value': current_value,
-            'unrealized_profit_loss': unrealized_profit_loss,
-            'unrealized_profit_loss_rate': unrealized_profit_loss_rate,
+            # 'unrealized_profit_loss': unrealized_profit_loss,
+            # 'unrealized_profit_loss_rate': unrealized_profit_loss_rate,
             'first_buy_date': portfolio.first_buy_date,
             'last_buy_date': portfolio.last_buy_date,
             'last_sell_date': portfolio.last_sell_date,
@@ -95,13 +98,21 @@ class DataConverters:
             'created_at': portfolio.created_at,
             'updated_at': portfolio.updated_at,
             'current_price': current_price,
+            'average_exchange_rate': portfolio.average_exchange_rate,
+            'krw_average_price': portfolio.krw_average_price,
+            
+            # 손익 정보
+            'realized_profit_loss': float(getattr(portfolio, 'realized_profit_loss', 0)) if getattr(portfolio, 'realized_profit_loss', None) is not None else None,
+            'krw_realized_profit_loss': float(getattr(portfolio, 'krw_realized_profit_loss', 0)) if getattr(portfolio, 'krw_realized_profit_loss', None) is not None else None,
         }
 
         # 주문 목록 변환 (간략 정보)
         try:
             orders = []
             if hasattr(portfolio, 'orders') and portfolio.orders:
-                for o in portfolio.orders:
+                # created_at 기준으로 내림차순 정렬 (최신 주문이 먼저 오도록)
+                sorted_orders = sorted(portfolio.orders, key=lambda o: o.created_at, reverse=True)
+                for o in sorted_orders:
                     orders.append({
                         'id': o.id,
                         'order_type': o.order_type,

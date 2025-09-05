@@ -9,45 +9,54 @@ from app.db.repositories.virtual_balance_repository import VirtualBalanceReposit
 from app.db.repositories.portfolio_repository import PortfolioRepository
 from app.db.models.transaction import Transaction, TransactionType
 from app.utils.simple_paging import SimplePage
+from app.db.models.order import Order
+from app.utils.data_converters import DataConverters
+import logging
 
 
 class TransactionService:
     """거래 내역 서비스"""
 
-    def __init__(self, db: Session):
+    def __init__(
+        self, 
+        db: Session, 
+        transaction_repository: TransactionRepository, 
+        virtual_balance_repository: VirtualBalanceRepository,
+        portfolio_repository: PortfolioRepository
+    ):
         self.db = db
-        self.transaction_repo = TransactionRepository(db)
-        self.trading_stats_repo = TradingStatisticsRepository(db)
-        self.virtual_balance_repo = VirtualBalanceRepository(db)
-        self.portfolio_repo = PortfolioRepository(db)
+        self.transaction_repository = transaction_repository
+        self.virtual_balance_repository = virtual_balance_repository
+        self.portfolio_repository = portfolio_repository
 
     def create_transaction_from_order(
         self,
-        user_id: str,
-        order_id: str,
-        stock_id: str,
+        order: Order,
         transaction_type: TransactionType,
-        quantity: int,
+        amount: Decimal,
         price: Decimal,
-        commission: Decimal,
-        tax: Decimal,
-        description: Optional[str] = None,
-        currency: Optional[str] = None,
+        quantity: Decimal,
+        commission: Decimal = Decimal('0'),
+        tax: Decimal = Decimal('0'),
+        notes: Optional[str] = None,
+        currency: Optional[str] = 'KRW',
         exchange_rate: Optional[Decimal] = None,
         krw_execution_amount: Optional[Decimal] = None,
+        realized_profit_loss: Optional[Decimal] = None,
+        krw_realized_profit_loss: Optional[Decimal] = None,
     ) -> Transaction:
         """주문에서 거래 내역 생성"""
         # 가상 잔고 조회
-        virtual_balance = self.virtual_balance_repo.get_by_user_id(user_id)
+        virtual_balance = self.virtual_balance_repository.get_by_user_id(order.user_id)
         if not virtual_balance:
             raise ValueError("가상 잔고를 찾을 수 없습니다")
         
         # 거래 금액 계산 (해외자산은 KRW 기준으로 기록)
         if currency and currency != 'KRW':
             rate = exchange_rate or Decimal('0')
-            amount = krw_execution_amount if krw_execution_amount is not None else (quantity * price * rate)
+            amount = krw_execution_amount if krw_execution_amount is not None else (amount * rate)
         else:
-            amount = quantity * price
+            amount = amount
         
         # 거래 전 잔고
         cash_balance_before = virtual_balance.cash_balance
@@ -60,24 +69,26 @@ class TransactionService:
         
         # 거래 내역 생성
         # 설명 보강(해외자산 환율 표시)
-        desc = description or f"{transaction_type.value} {quantity}주 @ {price}"
+        desc = notes or f"{transaction_type.value} {order.quantity}주 @ {order.order_price}"
         if currency and currency != 'KRW':
             if exchange_rate:
                 desc = f"{desc} (환율: {exchange_rate} {currency}->KRW)"
 
-        transaction = self.transaction_repo.create_transaction(
-            user_id=user_id,
+        transaction = self.transaction_repository.create_transaction(
+            user_id=order.user_id,
             transaction_type=transaction_type,
             amount=amount,
-            stock_id=stock_id,
-            order_id=order_id,
-            quantity=quantity,
-            price=price,
+            stock_id=order.product_code,
+            order_id=order.id,
+            quantity=order.quantity,
+            price=order.order_price,
             commission=commission,
             tax=tax,
             cash_balance_before=cash_balance_before,
             cash_balance_after=cash_balance_after,
-            description=desc
+            description=desc,
+            realized_profit_loss=realized_profit_loss,
+            krw_realized_profit_loss=krw_realized_profit_loss
         )
         
         return transaction
@@ -89,14 +100,14 @@ class TransactionService:
         description: Optional[str] = None
     ) -> Transaction:
         """입금 거래 내역 생성"""
-        virtual_balance = self.virtual_balance_repo.get_by_user_id(user_id)
+        virtual_balance = self.virtual_balance_repository.get_by_user_id(user_id)
         if not virtual_balance:
             raise ValueError("가상 잔고를 찾을 수 없습니다")
         
         cash_balance_before = virtual_balance.cash_balance
         cash_balance_after = cash_balance_before + amount
         
-        return self.transaction_repo.create_transaction(
+        return self.transaction_repository.create_transaction(
             user_id=user_id,
             transaction_type=TransactionType.DEPOSIT,
             amount=amount,
@@ -112,7 +123,7 @@ class TransactionService:
         description: Optional[str] = None
     ) -> Transaction:
         """출금 거래 내역 생성"""
-        virtual_balance = self.virtual_balance_repo.get_by_user_id(user_id)
+        virtual_balance = self.virtual_balance_repository.get_by_user_id(user_id)
         if not virtual_balance:
             raise ValueError("가상 잔고를 찾을 수 없습니다")
         
@@ -122,7 +133,7 @@ class TransactionService:
         cash_balance_before = virtual_balance.cash_balance
         cash_balance_after = cash_balance_before - amount
         
-        return self.transaction_repo.create_transaction(
+        return self.transaction_repository.create_transaction(
             user_id=user_id,
             transaction_type=TransactionType.WITHDRAW,
             amount=amount,
@@ -144,7 +155,7 @@ class TransactionService:
         """거래 내역 조회"""
         offset = (page - 1) * size
         
-        transactions = self.transaction_repo.get_by_user_id(
+        transactions = self.transaction_repository.get_by_user_id(
             user_id=user_id,
             offset=offset,
             limit=size,
@@ -154,7 +165,7 @@ class TransactionService:
             end_date=end_date
         )
         
-        total_count = self.transaction_repo.count_by_user_id(
+        total_count = self.transaction_repository.count_by_user_id(
             user_id=user_id,
             transaction_type=transaction_type,
             stock_id=stock_id,
@@ -169,7 +180,7 @@ class TransactionService:
 
     def get_transaction_by_id(self, user_id: str, transaction_id: str) -> Optional[Dict[str, Any]]:
         """특정 거래 내역 조회"""
-        transaction = self.transaction_repo.get_by_id_and_user(transaction_id, user_id)
+        transaction = self.transaction_repository.get_by_id_and_user(transaction_id, user_id)
         
         if not transaction:
             return None
@@ -177,7 +188,7 @@ class TransactionService:
         return self._to_transaction_dict(transaction)
 
     # ===== 내부 헬퍼 =====
-    def _to_order_brief(self, order) -> Optional[Dict[str, Any]]:
+    def _to_order_brief(self, order: Optional[Order]) -> Optional[Dict[str, Any]]:
         if not order:
             return None
         return {
@@ -215,7 +226,9 @@ class TransactionService:
             'reference_number': transaction.reference_number,
             'is_simulated': transaction.is_simulated,
             'created_at': transaction.created_at,
-            'order': self._to_order_brief(getattr(transaction, 'order', None)),
+            'order': self._to_order_brief(transaction.order) if transaction.order else None,
+            'realized_profit_loss': float(getattr(transaction, 'realized_profit_loss', 0)) if getattr(transaction, 'realized_profit_loss', None) is not None else None,
+            'krw_realized_profit_loss': float(getattr(transaction, 'krw_realized_profit_loss', 0)) if getattr(transaction, 'krw_realized_profit_loss', None) is not None else None,
         }
 
     def update_daily_statistics(self, user_id: str, as_of: Optional[datetime] = None) -> None:
@@ -225,7 +238,7 @@ class TransactionService:
         period_start = as_of
         period_end = as_of.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        summary = self.transaction_repo.get_trading_summary(user_id=user_id, period_days=1)
+        summary = self.transaction_repository.get_trading_summary(user_id=user_id, period_days=1)
         statistics_data = {
             'total_trades': summary['total_transactions'],
             'buy_trades': 0,
@@ -267,13 +280,13 @@ class TransactionService:
             return self._get_yearly_statistics(user_id, start_date, end_date)
         else:
             # 기본적으로 거래 요약 반환
-            summary = self.transaction_repo.get_trading_summary(user_id, 30)
+            summary = self.transaction_repository.get_trading_summary(user_id, 30)
             return [summary]
 
     def _get_monthly_statistics(self, user_id: str, start_date: Optional[datetime], end_date: Optional[datetime]) -> List[Dict[str, Any]]:
         """월별 통계"""
         year = end_date.year if end_date else datetime.now().year
-        return self.transaction_repo.get_monthly_summary(user_id, year)
+        return self.transaction_repository.get_monthly_summary(user_id, year)
 
     def _get_yearly_statistics(self, user_id: str, start_date: Optional[datetime], end_date: Optional[datetime]) -> List[Dict[str, Any]]:
         """연별 통계"""
@@ -287,7 +300,7 @@ class TransactionService:
             year_end = datetime(year, 12, 31, 23, 59, 59)
             
             # 해당 연도 거래 요약
-            transactions = self.transaction_repo.get_by_user_id(
+            transactions = self.transaction_repository.get_by_user_id(
                 user_id=user_id,
                 start_date=year_start,
                 end_date=year_end
@@ -326,10 +339,10 @@ class TransactionService:
             start_date = datetime(2020, 1, 1)  # 임의의 과거 날짜
         
         # 거래 요약
-        summary = self.transaction_repo.get_trading_summary(user_id, (end_date - start_date).days)
+        summary = self.transaction_repository.get_trading_summary(user_id, (end_date - start_date).days)
         
         # 포트폴리오 요약
-        portfolio_summary = self.portfolio_repo.get_portfolio_summary(user_id)
+        portfolio_summary = self.portfolio_repository.get_portfolio_summary(user_id)
         
         # 성과 지표 계산 (간단한 버전)
         total_invested = summary['total_buy_amount']
@@ -356,8 +369,8 @@ class TransactionService:
     def get_trading_dashboard(self, user_id: str) -> Dict[str, Any]:
         """거래 대시보드 데이터"""
         # 계좌 요약
-        virtual_balance = self.virtual_balance_repo.get_by_user_id(user_id)
-        portfolio_summary = self.portfolio_repo.get_portfolio_summary(user_id)
+        virtual_balance = self.virtual_balance_repository.get_by_user_id(user_id)
+        portfolio_summary = self.portfolio_repository.get_portfolio_summary(user_id)
         
         account_summary = {
             'cash_balance': float(virtual_balance.cash_balance) if virtual_balance else 0.0,
@@ -375,7 +388,7 @@ class TransactionService:
         performance_metrics = self.get_trading_performance(user_id, "1M")
         
         # 월별 성과 (최근 12개월)
-        monthly_performance = self.transaction_repo.get_monthly_summary(user_id)
+        monthly_performance = self.transaction_repository.get_monthly_summary(user_id)
         
         # 상위 수익/손실 종목 (임시 구현)
         top_gainers = []

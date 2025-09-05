@@ -6,6 +6,7 @@ from app.db.models.watchlist import WatchList, WatchlistDirectory
 from app.utils.simple_paging import SimplePage
 from app.utils.data_converters import DataConverters
 from app.services.toss_proxy_service import TossProxyService
+from app.exceptions.custom_exceptions import ValidationError
 
 
 class WatchListService:
@@ -27,6 +28,10 @@ class WatchListService:
         target_price: Optional[float] = None
     ) -> WatchList:
         try:
+            # product_code 유효성 검사: 'US' 또는 'A'로 시작
+            if not (product_code.startswith('US') or product_code.startswith('A')):
+                raise ValidationError("product_code는 'US' 또는 'A'로 시작해야 합니다")
+
             # 디렉토리가 지정되지 않은 경우 기본 디렉토리 사용
             if not directory_id:
                 default_directory = self.watchlist_repo.ensure_default_directory(user_id)

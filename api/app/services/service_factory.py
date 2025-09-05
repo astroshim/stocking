@@ -1,4 +1,7 @@
 from sqlalchemy.orm import Session
+from app.services.toss_proxy_service import TossProxyService
+from app.services.transaction_service import TransactionService
+from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
 
 def payment_service_factory(db: Session = None):
     """PaymentService 인스턴스 생성을 위한 팩토리 함수"""
@@ -67,10 +70,23 @@ def order_service_factory(db: Session = None):
     return OrderService(order_repository, virtual_balance_repository, toss_proxy_service)
 
 
-def transaction_service_factory(db: Session = None):
+def transaction_service_factory(
+    db: Session = None
+) -> TransactionService:
     """TransactionService 인스턴스 생성을 위한 팩토리 함수"""
+    from app.db.repositories.transaction_repository import TransactionRepository
+    from app.db.repositories.portfolio_repository import PortfolioRepository
     from app.services.transaction_service import TransactionService
-    return TransactionService(db)
+
+    transaction_repository = TransactionRepository(db)
+    virtual_balance_repository = VirtualBalanceRepository(db)
+    portfolio_repository = PortfolioRepository(db)
+    return TransactionService(
+        db=db,
+        transaction_repository=transaction_repository,
+        virtual_balance_repository=virtual_balance_repository,
+        portfolio_repository=portfolio_repository
+    )
 
 def watchlist_service_factory(db: Session = None):
     """WatchListService 인스턴스 생성을 위한 팩토리 함수"""

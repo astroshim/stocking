@@ -104,15 +104,18 @@ class TossProxyService:
     
     def get_stock_info(self, product_code: str) -> Dict[str, Any]:
         """종목 기본정보 조회"""
+        self._validate_product_code_prefix(product_code)
         return self.proxy_get(f"/api/v2/stock-infos/{product_code}")
     
     def get_stock_price_details(self, product_code: str) -> Dict[str, Any]:
         """종목 거래 현황 조회"""
+        self._validate_product_code_prefix(product_code)
         params = {"productCodes": f"{product_code}"}
         return self.proxy_get("/api/v3/stock-prices/details", params=params)
     
     def get_stock_overview(self, product_code: str) -> Dict[str, Any]:
         """종목 주요정보 조회"""
+        self._validate_product_code_prefix(product_code)
         return self.proxy_get(f"/api/v2/stock-infos/{product_code}/overview")
 
     def get_exchange_rate(self, from_currency: str, to_currency: str = 'KRW') -> Decimal:
@@ -187,4 +190,10 @@ class TossProxyService:
             if isinstance(e, ValidationError):
                 raise
             raise ValidationError(f"Toss API 환율 조회 실패: {str(e)}")
+
+    @staticmethod
+    def _validate_product_code_prefix(product_code: str) -> None:
+        """product_code는 'US' 또는 'A'로 시작해야 함"""
+        if not (isinstance(product_code, str) and (product_code.startswith('US') or product_code.startswith('A'))):
+            raise ValidationError("product_code는 'US' 또는 'A'로 시작해야 합니다")
     

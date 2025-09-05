@@ -8,9 +8,11 @@ from app.db.repositories.order_repository import OrderRepository
 from app.db.repositories.user_repository import UserRepository
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
 from app.db.repositories.portfolio_repository import PortfolioRepository
+from app.db.repositories.transaction_repository import TransactionRepository
 from app.services.transaction_service import TransactionService
 
 from app.db.models.order import Order, OrderStatus, OrderType, OrderMethod, ExitReason
+from app.db.models.transaction import Transaction
 from app.db.models.virtual_balance import VirtualBalance
 from app.services.toss_proxy_service import TossProxyService
 from app.utils.transaction_manager import TransactionManager
@@ -25,7 +27,14 @@ class OrderService:
         self.order_repository = order_repository
         self.virtual_balance_repository = virtual_balance_repository
         self.portfolio_repository = PortfolioRepository(order_repository.session)
-        self.transaction_service = TransactionService(order_repository.session)
+        
+        db_session = order_repository.session
+        self.transaction_service = TransactionService(
+            db=db_session,
+            transaction_repository=TransactionRepository(db_session),
+            virtual_balance_repository=self.virtual_balance_repository,
+            portfolio_repository=self.portfolio_repository
+        )
 
         self.toss_proxy_service = toss_proxy_service
 
@@ -319,22 +328,26 @@ class OrderService:
         # 환율도 이미 order에 설정되어 있음 (create_order에서 처리)
         exchange_rate = order.exchange_rate or Decimal('1.0')
         
-        # 원화 환산 금액 계산
+        # 원화 환산 금액 계산 (통화와 무관하게 최종 KRW 금액 산출)
         if order.currency == 'KRW':
             krw_order_amount = order.quantity * current_price
         else:
-            # 해외자산: 이미 설정된 환율 사용
             krw_order_amount = order.quantity * current_price * exchange_rate
         
         commission = self._calculate_commission(krw_order_amount)
         tax = self._calculate_tax(krw_order_amount, order.order_type)
         
         # 시장가 주문의 경우 실제 체결 가격으로 실시간 잔고 재검증
+        # 주문 객체에 KRW 체결 금액 저장 (BUY/SELL 공통)
+        try:
+            order.krw_executed_amount = krw_order_amount
+        except Exception:
+            pass
+
         if order.order_type == OrderType.BUY:
             # 환율 정보 업데이트 (해외자산의 경우)
             if order.currency != 'KRW':
                 order.exchange_rate = exchange_rate
-                order.krw_executed_amount = krw_order_amount
             
             total_required = krw_order_amount + commission + tax
             
@@ -380,16 +393,28 @@ class OrderService:
             order, current_price, order.quantity, commission, tax
         )
         
-        # 환율 정보가 있는 경우 execution에도 설정
-        if order.currency != 'KRW' and hasattr(execution, 'exchange_rate'):
-            execution.exchange_rate = order.exchange_rate
-            execution.krw_execution_price = current_price * order.exchange_rate
-            execution.krw_execution_amount = order.quantity * execution.krw_execution_price
+        # execution에도 KRW 환산 정보 설정 (통화와 무관하게 설정)
+        try:
+            rate_for_exec = order.exchange_rate or (Decimal('1.0') if (order.currency or 'KRW') == 'KRW' else exchange_rate)
+            if hasattr(execution, 'exchange_rate'):
+                execution.exchange_rate = rate_for_exec
+            if hasattr(execution, 'krw_execution_price'):
+                execution.krw_execution_price = current_price * rate_for_exec
+            if hasattr(execution, 'krw_execution_amount'):
+                execution.krw_execution_amount = order.quantity * (current_price * rate_for_exec)
+        except Exception:
+            pass
+
+        # 체결시 손익이 얼마인지 계산
+        realized_profit_loss, krw_realized_profit_loss = self._calculate_realized_profit_loss(order, execution)
+        logging.info(f"체결시 손익이 얼마인지 계산 >> Realized Profit Loss: {realized_profit_loss}, KRW: {krw_realized_profit_loss}")
+        logging.info(f"체결시 손익이 얼마인지 계산 >> Execution: {execution}")
+
         
         # 거래 내역을 먼저 생성하여 cash_before/after를 정확히 기록
-        self._create_transaction_for_execution(order, execution)
+        transaction = self._create_transaction_for_execution(order, execution, realized_profit_loss, krw_realized_profit_loss)
         self._update_virtual_balance_for_execution(order, execution)
-        self._update_portfolio_for_execution(order, execution)
+        self._update_portfolio_for_execution(order, execution, transaction)
 
 
     def _calculate_commission(self, amount: Decimal) -> Decimal:
@@ -457,7 +482,7 @@ class OrderService:
                     change_amount=-actual_for_executed_krw,
                     change_type='BUY',
                     related_order_id=order.id,
-                    description=f"BUY executed: {execution.execution_quantity} @ {execution.execution_price}"
+                    description=f"BUY executed: {execution.execution_quantity} @ {execution.execution_price}, {actual_for_executed_krw}원"
                 )
             except Exception:
                 pass
@@ -494,7 +519,7 @@ class OrderService:
                     change_amount=net_amount_krw,
                     change_type='SELL',
                     related_order_id=order.id,
-                    description=f"SELL executed: {execution.execution_quantity} @ {execution.execution_price}"
+                    description=f"SELL executed: {execution.execution_quantity} @ {execution.execution_price}, {net_amount_krw}원"
                 )
             except Exception:
                 pass
@@ -524,8 +549,12 @@ class OrderService:
                 if virtual_balance.available_cash < amount_difference:
                     raise InsufficientBalanceError("Insufficient available cash for quantity increase")
 
-    def _update_portfolio_for_execution(self, order: Order, execution) -> None:
-        """체결에 따라 포트폴리오를 업데이트합니다."""
+    def _update_portfolio_for_execution(self, order: Order, execution, transaction: Transaction) -> None:
+        """
+        체결에 따라 포트폴리오를 업데이트합니다.
+        - BUY: 수량 및 평단가 업데이트 또는 신규 생성
+        - SELL: 수량 감소 및 평단가 재계산, 누적 실현손익 업데이트
+        """
         user_id = order.user_id
         stock_id = self._get_product_code(order)
         quantity = execution.execution_quantity
@@ -561,7 +590,7 @@ class OrderService:
                     average_exchange_rate=average_exchange_rate,
                     krw_average_price=krw_average_price,
                 )
-                order.portfolio_id = portfolio.id
+            order.portfolio_id = portfolio.id
                 
         elif order.order_type == OrderType.SELL:
             if portfolio:
@@ -577,15 +606,18 @@ class OrderService:
                     # 비교 실패 시 설정 생략
                     order.exit_reason = None
 
-                # 매도 업데이트 (원가 기준 invested_amount 감소)
-                cost_basis_reduction = portfolio.average_price * quantity
-                vb = self.virtual_balance_repository.get_by_user_id(user_id)
-                if vb.invested_amount <= cost_basis_reduction:
-                    vb.invested_amount = Decimal('0')
-                else:
-                    vb.invested_amount -= cost_basis_reduction
+                logging.info(f">> Transaction: {transaction}")
+                logging.info(f">> Portfolio: {portfolio}")
 
-                # 포트폴리오 수량/평단 업데이트
+                # 누적 실현 손익 업데이트
+                if transaction and transaction.realized_profit_loss is not None:
+                    portfolio.realized_profit_loss = (portfolio.realized_profit_loss or 0) + transaction.realized_profit_loss
+                if transaction and transaction.krw_realized_profit_loss is not None:
+                    portfolio.krw_realized_profit_loss = (portfolio.krw_realized_profit_loss or 0) + transaction.krw_realized_profit_loss
+
+                logging.info(f">> Portfolio: {portfolio}")
+
+                # 포트폴리오 업데이트 (매도)
                 self.portfolio_repository.update_portfolio_sell(portfolio, quantity, price)
                 order.portfolio_id = portfolio.id
                 
@@ -593,12 +625,18 @@ class OrderService:
                 if portfolio.current_quantity == 0:
                     self.portfolio_repository.delete_empty_portfolio(portfolio)
             else:
-                # 포트폴리오가 없는데 매도하려는 경우 (이론상 발생하지 않아야 함)
-                raise ValidationError("Cannot sell stock not in portfolio")
+                logging.warning(f"매도 주문에 대한 포트폴리오를 찾을 수 없습니다: user_id={user_id}, product_code={stock_id}")
+                # 포트폴리오가 없는 매도 주문은 로깅만 하고 넘어감 (데이터 정합성 문제 가능성)
         
         logging.info(f"Portfolio updated for execution: {order.id}, {order.order_type.value} {quantity} shares at {price}")
 
-    def _create_transaction_for_execution(self, order: Order, execution) -> None:
+    def _create_transaction_for_execution(
+        self, 
+        order: Order, 
+        execution, 
+        realized_profit_loss: Optional[Decimal] = None,
+        krw_realized_profit_loss: Optional[Decimal] = None
+    ) -> Transaction:
         """체결에 따라 거래 내역을 생성합니다."""
         from app.db.models.transaction import TransactionType
         
@@ -606,22 +644,26 @@ class OrderService:
         transaction_type = TransactionType.BUY if order.order_type == OrderType.BUY else TransactionType.SELL
         
         # 거래 내역 생성
-        transaction = self.transaction_service.create_transaction_from_order(
-            user_id=order.user_id,
-            order_id=order.id,
-            stock_id=self._get_product_code(order),
+        notes = f"Order execution for {order.id}"
+        
+        # execution 객체에서 krw_execution_amount 값을 가져오도록 시도
+        krw_execution_amount = getattr(execution, 'krw_execution_amount', None)
+
+        return self.transaction_service.create_transaction_from_order(
+            order=order,
             transaction_type=transaction_type,
-            quantity=execution.execution_quantity,
+            amount=execution.execution_amount,
             price=execution.execution_price,
+            quantity=execution.execution_quantity,
             commission=order.commission,
             tax=order.tax,
-            description=f"{order.order_type.value} 주문 체결: {execution.execution_quantity}주 @ {execution.execution_price}",
+            notes=notes,
             currency=order.currency,
             exchange_rate=order.exchange_rate,
-            krw_execution_amount=getattr(execution, 'krw_execution_amount', None),
+            krw_execution_amount=krw_execution_amount,
+            realized_profit_loss=realized_profit_loss,
+            krw_realized_profit_loss=krw_realized_profit_loss,
         )
-        
-        logging.info(f"Transaction created for execution: {transaction.id}")
 
     # ==================== 헬퍼 메서드들 ====================
 
@@ -788,3 +830,72 @@ class OrderService:
                 f"{f', 필요 금액: {required_amount:,.0f}원' if required_amount else ''}"
                 f"{f', 가용 잔고: {available_cash:,.0f}원' if available_cash else ''}"
             )
+
+    def _calculate_realized_profit_loss(self, order: Order, execution) -> tuple[Optional[Decimal], Optional[Decimal]]:
+        """
+        매도 주문 체결 시 실현손익을 계산합니다.
+        
+        Args:
+            order: 체결된 주문 객체
+            execution: 체결 정보 객체
+            
+        Returns:
+            tuple[Optional[Decimal], Optional[Decimal]]: (현지통화 실현손익, 원화 실현손익)
+            매수 주문의 경우 (None, None) 반환
+        """
+        # 매수 주문의 경우 실현손익 없음
+        if order.order_type != OrderType.SELL:
+            return None, None
+            
+        try:
+            # 포트폴리오 조회 (평균 매수가 정보 필요)
+            portfolio = self.portfolio_repository.get_by_user_and_stock(
+                order.user_id, 
+                self._get_product_code(order)
+            )
+            
+            if not portfolio:
+                logging.warning(f"매도 주문에 대한 포트폴리오를 찾을 수 없습니다: {order.id}")
+                return Decimal('0').normalize(), Decimal('0').normalize()
+            
+            # 체결 정보
+            execution_quantity = execution.execution_quantity
+            execution_price = execution.execution_price
+            average_buy_price = portfolio.average_price
+            
+            # 현지통화 기준 실현손익 계산
+            # 실현손익 = (매도가 - 평균매수가) × 매도수량
+            realized_profit_loss = (execution_price - average_buy_price) * execution_quantity
+            
+            # 원화 환산 실현손익 계산
+            krw_realized_profit_loss = None
+            
+            if order.currency and order.currency != 'KRW':
+                # 해외자산의 경우 환율 적용
+                exchange_rate = order.exchange_rate or Decimal('1.0')
+                
+                # 평균 매수 시점 환율과 현재 환율 고려
+                avg_exchange_rate = portfolio.average_exchange_rate or exchange_rate
+                krw_avg_buy_price = portfolio.krw_average_price or (average_buy_price * avg_exchange_rate)
+                krw_execution_price = execution_price * exchange_rate
+                
+                # 원화 기준 실현손익 = (원화 매도가 - 원화 평균매수가) × 매도수량
+                krw_realized_profit_loss = (krw_execution_price - krw_avg_buy_price) * execution_quantity
+            else:
+                # 국내자산의 경우 현지통화와 원화가 동일
+                krw_realized_profit_loss = realized_profit_loss
+            
+            logging.info(
+                f"실현손익 계산 완료 - 종목: {self._get_product_code(order)}, "
+                f"매도수량: {execution_quantity}, "
+                f"매도가: {execution_price} {order.currency or 'KRW'}, "
+                f"평균매수가: {average_buy_price} {order.currency or 'KRW'}, "
+                f"실현손익: {realized_profit_loss} {order.currency or 'KRW'}"
+                f"{f', 원화 실현손익: {krw_realized_profit_loss} KRW' if krw_realized_profit_loss != realized_profit_loss else ''}"
+            )
+            
+            return realized_profit_loss.normalize(), krw_realized_profit_loss.normalize()
+            
+        except Exception as e:
+            logging.error(f"실현손익 계산 중 오류 발생: {str(e)}")
+            return Decimal('0').normalize(), Decimal('0').normalize()

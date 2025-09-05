@@ -13,6 +13,10 @@ from app.api.v1.schemas.stock_schemas import StockPriceDetailsResponse
 
 router = APIRouter()
 
+def _assert_product_code(product_code: str):
+    if not (isinstance(product_code, str) and (product_code.startswith('US') or product_code.startswith('A'))):
+        raise HTTPException(status_code=400, detail="product_code는 'US' 또는 'A'로 시작해야 합니다")
+
 
 # <주식 골라보기 목록>
 SCREENER_CATEGORIES = {
@@ -506,6 +510,7 @@ def proxy_stock_info(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     # v2 stock-infos requires 'A' prefix
     data = toss_proxy_service.get_stock_info(productCode)
     return create_response(data, message="OK")
@@ -548,6 +553,7 @@ def proxy_price_details(
     - **productCode**: 종목 코드 (예: A456160)
     - **Returns**: StockPriceDetailsResponse 형태의 응답
     """
+    _assert_product_code(productCode)
     params = {"productCodes": f"{productCode}"}
     data = toss_proxy_service.proxy_get("/api/v3/stock-prices/details", params=params)
     return create_response(data, message="OK")
@@ -559,6 +565,7 @@ def proxy_top_broker(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     params = {"code": f"{productCode}"}
     data = toss_proxy_service.proxy_get("/api/v1/mds/broker/trading-ranking", params=params)
     return create_response(data, message="OK")
@@ -571,6 +578,7 @@ def proxy_trade_trend(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     params = {"productCode": f"{productCode}", "size": size}
     data = toss_proxy_service.proxy_get("/api/v1/stock-infos/trade/trend/trading-trend", params=params)
     return create_response(data, message="OK")
@@ -584,6 +592,7 @@ def proxy_stock_overview(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_get(f"/api/v2/stock-infos/{productCode}/overview")
     return create_response(data, message="OK")
 
@@ -612,6 +621,7 @@ def proxy_stock_investment_indicators(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_get(f"/api/v1/stock-detail/ui/wts/{productCode}/investment-indicators")
     return create_response(data, message="OK")
 
@@ -622,6 +632,7 @@ def proxy_stock_operating_income(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_post(f"/api/v2/stock-infos/operating-income/{productCode}", body={}, base_url=toss_proxy_service.INFO_BASE_URL)
     return create_response(data, message="OK")
 
@@ -632,6 +643,7 @@ def proxy_stock_stability(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_post(f"/api/v2/stock-infos/stability/{productCode}", body={}, base_url=toss_proxy_service.INFO_BASE_URL)
     return create_response(data, message="OK")
 
@@ -642,6 +654,7 @@ def proxy_stock_revenue_and_net_profit(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_post(f"/api/v2/stock-infos/revenue-and-net-profit/{productCode}", body={}, base_url=toss_proxy_service.INFO_BASE_URL)
     return create_response(data, message="OK")
 
@@ -652,6 +665,7 @@ def proxy_stock_income_statement(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_post(f"/api/v2/companies/{productCode}/financial-statement-records", body={}, base_url=toss_proxy_service.INFO_BASE_URL)
     return create_response(data, message="OK")
 
@@ -662,6 +676,7 @@ def proxy_stock_balance_sheet(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_post(f"/api/v2/companies/{productCode}/financial-statements/comprehensive", body=body, base_url=toss_proxy_service.INFO_BASE_URL)
     return create_response(data, message="OK")
 
@@ -672,6 +687,7 @@ def proxy_stock_estimate_revenue(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_post(f"/api/v2/companies/{productCode}/financial/estimate/revenue", body={}, base_url=toss_proxy_service.INFO_BASE_URL)
     return create_response(data, message="OK")
 
@@ -684,6 +700,7 @@ def proxy_stock_analyst_reports(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_get(f"/api/v1/stock-detail/ui/wts/{productCode}/analyst-reports")
     return create_response(data, message="OK")
 
@@ -694,6 +711,7 @@ def proxy_stock_analyst_opinion(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_get(f"/api/v1/stock-detail/ui/wts/{productCode}/analyst-opinion")
     return create_response(data, message="OK")
 
@@ -704,6 +722,7 @@ def proxy_stock_evaluation_comparison(
     current_user_id: str = Depends(get_current_user),
     toss_proxy_service: TossProxyService = Depends(get_toss_proxy_service)
 ):
+    _assert_product_code(productCode)
     data = toss_proxy_service.proxy_post(f"/api/v2/stock-infos/evaluation-comparison/{productCode}", body={}, base_url=toss_proxy_service.INFO_BASE_URL)
     return create_response(data, message="OK")
 

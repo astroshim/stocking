@@ -1,5 +1,5 @@
 from typing import List, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, desc
 from decimal import Decimal
 
@@ -13,9 +13,15 @@ class PortfolioRepository(BaseRepository):
     def __init__(self, db: Session):
         super().__init__(db)
 
-    def get_by_user_id(self, user_id: str, only_active: bool = True) -> List[Portfolio]:
+    def get_by_user_id(self, user_id: str, only_active: bool = True, include_orders: bool = True) -> List[Portfolio]:
         """사용자의 포트폴리오 목록 조회"""
-        query = self.session.query(Portfolio).filter(Portfolio.user_id == user_id)
+        query = self.session.query(Portfolio)
+        
+        # N+1 쿼리 방지를 위해 orders를 eager loading (필요한 경우에만)
+        if include_orders:
+            query = query.options(joinedload(Portfolio.orders))
+            
+        query = query.filter(Portfolio.user_id == user_id)
         
         if only_active:
             query = query.filter(Portfolio.current_quantity > 0)
@@ -23,8 +29,8 @@ class PortfolioRepository(BaseRepository):
         return query.order_by(desc(Portfolio.updated_at)).all()
 
     def get_by_user_and_stock(self, user_id: str, stock_id: str) -> Optional[Portfolio]:
-        """사용자의 특정 종목 포트폴리오 조회 (stock_id 호환: product_code로 조회)"""
-        return self.session.query(Portfolio).filter(
+        """사용자의 특정 종목 포트폴리오 조회 (N+1 쿼리 방지를 위해 orders를 eager loading)"""
+        return self.session.query(Portfolio).options(joinedload(Portfolio.orders)).filter(
             and_(
                 Portfolio.user_id == user_id,
                 Portfolio.product_code == stock_id
@@ -115,7 +121,7 @@ class PortfolioRepository(BaseRepository):
 
     def get_portfolio_summary(self, user_id: str) -> dict:
         """포트폴리오 요약 정보 조회"""
-        portfolios = self.get_by_user_id(user_id, only_active=True)
+        portfolios = self.get_by_user_id(user_id, only_active=True, include_orders=False)
         
         total_stocks = len(portfolios)
         total_invested_amount = Decimal('0')
@@ -146,7 +152,7 @@ class PortfolioRepository(BaseRepository):
 
     def get_sector_allocation(self, user_id: str) -> List[dict]:
         """섹터별 배분 조회"""
-        portfolios = self.get_by_user_id(user_id, only_active=True)
+        portfolios = self.get_by_user_id(user_id, only_active=True, include_orders=False)
         
         sector_data = {}
         total_value = Decimal('0')
@@ -179,7 +185,7 @@ class PortfolioRepository(BaseRepository):
 
     def get_top_holdings(self, user_id: str, limit: int = 5) -> List[dict]:
         """상위 보유 종목 조회"""
-        portfolios = self.get_by_user_id(user_id, only_active=True)
+        portfolios = self.get_by_user_id(user_id, only_active=True, include_orders=False)
         
         holdings = []
         for portfolio in portfolios:

@@ -39,6 +39,10 @@ class Portfolio(UUIDMixin, Base):
     average_exchange_rate = Column(Numeric(10, 4), nullable=True, comment='평균 매수 시점 환율 (외화 -> KRW)')
     krw_average_price = Column(Numeric(20, 2), nullable=True, comment='원화 환산 평균 매수가')
     
+    # 손익 정보
+    realized_profit_loss = Column(Numeric(20, 8), nullable=False, default=0, comment='누적 실현 손익 (현지통화)')
+    krw_realized_profit_loss = Column(Numeric(20, 2), nullable=False, default=0, comment='원화 환산 누적 실현 손익')
+    
     # 시간 정보
     first_buy_date = Column(DateTime, nullable=False, comment='최초 매수일')
     last_buy_date = Column(DateTime, nullable=True, comment='최근 매수일')

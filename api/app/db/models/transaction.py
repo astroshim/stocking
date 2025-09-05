@@ -17,7 +17,7 @@ class TransactionType(enum.Enum):
     FEE = "FEE"                   # 수수료
     TAX = "TAX"                   # 세금
 
-
+# 주문이 체결된 후 발생하는 실제 자산/현금의 이동을 기록하는 장부(Ledger)입니다
 class Transaction(UUIDMixin, Base):
     """거래 내역"""
     __tablename__ = 'transactions'
@@ -51,6 +51,11 @@ class Transaction(UUIDMixin, Base):
     reference_number = Column(String(50), nullable=True, comment='참조번호')
     is_simulated = Column(Boolean, nullable=False, default=True, comment='가상거래 여부')
     created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    # 실현손익 (매도 거래에 한해 기록)
+    realized_profit_loss = Column(Numeric(20, 8), nullable=True, comment='실현 손익 (현지통화)')
+    krw_realized_profit_loss = Column(Numeric(20, 2), nullable=True, comment='원화 환산 실현 손익')
 
     # 관계 설정
     user = relationship('User', back_populates='transactions')

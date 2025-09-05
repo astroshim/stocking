@@ -50,7 +50,49 @@ class TransactionResponse(InitVarModel):
     reference_number: Optional[str]
     is_simulated: bool
     created_at: datetime
-    order: Optional[OrderBriefResponse]
+    order: Optional[OrderBriefResponse] = None
+    
+    # 실현손익
+    realized_profit_loss: Optional[Decimal] = Field(None, description='실현 손익 (현지통화)')
+    krw_realized_profit_loss: Optional[Decimal] = Field(None, description='원화 환산 실현 손익')
+
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "id": "1234567890abcdef1234567890abcdef",
+            "user_id": "user123",
+            "stock_id": "A00001",
+            "order_id": "order123",
+            "transaction_type": "BUY",
+            "quantity": 10,
+            "price": 10000,
+            "amount": 100000,
+            "commission": 1000,
+            "tax": 100,
+            "net_amount": 99000,
+            "cash_balance_before": 1000000,
+            "cash_balance_after": 990000,
+            "transaction_date": "2023-10-27T10:00:00",
+            "settlement_date": "2023-10-27T10:00:00",
+            "description": "Sample transaction",
+            "reference_number": "REF123",
+            "is_simulated": False,
+            "created_at": "2023-10-27T10:00:00",
+            "order": {
+                "id": "order123",
+                "product_code": "A00001",
+                "product_name": "Sample Stock",
+                "market": "KOSPI",
+                "order_type": "LIMIT",
+                "order_method": "BUY",
+                "currency": "KRW",
+                "exchange_rate": 1000,
+                "order_price": 10000,
+                "krw_order_price": 100000,
+            },
+            "realized_profit_loss": 1000,
+            "krw_realized_profit_loss": 1000000,
+        }
 
 
 class TransactionListResponse(PagedResponse[TransactionResponse]):
