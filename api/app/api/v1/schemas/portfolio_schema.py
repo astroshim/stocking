@@ -34,6 +34,7 @@ class PortfolioResponse(InitVarModel):
     # 손익 정보
     realized_profit_loss: Optional[Decimal] = Field(None, description="누적 실현 손익 (현지통화)")
     krw_realized_profit_loss: Optional[Decimal] = Field(None, description="원화 환산 누적 실현 손익")
+    realized_profit_loss_rate: Optional[Decimal] = Field(None, description="누적 실현 손익률 (%) - KRW 기준")
 
     class Config:
         from_attributes = True
@@ -59,6 +60,8 @@ class PortfolioResponse(InitVarModel):
             "krw_average_price": 180000.00,
             "realized_profit_loss": 100.00,
             "krw_realized_profit_loss": 120000.00
+            ,
+            "realized_profit_loss_rate": 12.34
         }
 
 

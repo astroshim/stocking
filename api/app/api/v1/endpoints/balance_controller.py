@@ -12,7 +12,7 @@ from app.utils.response_helper import create_response
 router = APIRouter()
 
 
-@router.get("/", response_model=VirtualBalanceResponse, summary="가상 잔고 조회")
+@router.get("", response_model=VirtualBalanceResponse, summary="가상 잔고 조회")
 async def get_virtual_balance(
     current_user_id: str = Depends(get_current_user),
     balance_service: BalanceService = Depends(get_balance_service)
@@ -33,7 +33,7 @@ async def get_virtual_balance(
         raise HTTPException(status_code=500, detail=f"가상 잔고 조회 실패: {str(e)}")
 
 
-@router.put("/", summary="가상 잔고 업데이트")
+@router.put("", summary="가상 잔고 업데이트")
 async def update_virtual_balance(
     balance_data: BalanceUpdateRequest,
     current_user_id: str = Depends(get_current_user),

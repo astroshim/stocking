@@ -13,10 +13,10 @@ class PortfolioRepository(BaseRepository):
     def __init__(self, db: Session):
         super().__init__(db)
 
-    def get_by_user_id(self, user_id: str, only_active: bool = True, include_orders: bool = True) -> List[Portfolio]:
+    def get_by_user_id(self, user_id: str, only_active: bool = True, include_orders: bool = False) -> List[Portfolio]:
         """사용자의 포트폴리오 목록 조회"""
         query = self.session.query(Portfolio)
-        
+
         # N+1 쿼리 방지를 위해 orders를 eager loading (필요한 경우에만)
         if include_orders:
             query = query.options(joinedload(Portfolio.orders))
@@ -59,7 +59,8 @@ class PortfolioRepository(BaseRepository):
         
         # 초기 총 구매금액 계산
         total_buy_amount = average_price * quantity
-        krw_total_buy_amount = krw_average_price * quantity if krw_average_price else None
+        # krw_average_price가 주어지면 해당 단가로 총 원화 매수금액 계산
+        krw_total_buy_amount = (krw_average_price * quantity) if krw_average_price else None
         
         portfolio = Portfolio(
             user_id=user_id,
@@ -98,9 +99,9 @@ class PortfolioRepository(BaseRepository):
         buy_amount = price * quantity
         krw_buy_amount = krw_price * quantity if krw_price else buy_amount
         
-        # 총 구매금액 업데이트
+        # 총 구매금액 업데이트 (현지통화, KRW)
         portfolio.total_buy_amount = (portfolio.total_buy_amount or Decimal('0')) + buy_amount
-        if krw_price:
+        if krw_price is not None:
             portfolio.krw_total_buy_amount = (portfolio.krw_total_buy_amount or Decimal('0')) + krw_buy_amount
         
         # 평균 단가 계산 (기존 로직 유지)
@@ -126,9 +127,26 @@ class PortfolioRepository(BaseRepository):
         # 수량 차감 (실현 손익은 트랜잭션에서 관리)
         portfolio.current_quantity -= quantity
         
+        # 매도에 따른 총 매수원가 감소: 평균단가 * 매도수량
+        # total_buy_amount는 보유 원가 총액을 의미하도록 유지
+        try:
+            decrease_cost = (portfolio.average_price or Decimal('0')) * quantity
+            portfolio.total_buy_amount = max(Decimal('0'), (portfolio.total_buy_amount or Decimal('0')) - decrease_cost)
+            if portfolio.krw_average_price is not None:
+                decrease_cost_krw = (portfolio.krw_average_price or Decimal('0')) * quantity
+                current_krw_total = portfolio.krw_total_buy_amount or Decimal('0')
+                # None일 수 있으니 안전하게 처리
+                portfolio.krw_total_buy_amount = max(Decimal('0'), current_krw_total - decrease_cost_krw)
+        except Exception:
+            # 감소 계산 실패 시 원가 필드는 변경하지 않음
+            pass
+
         # 현재 수량이 0이 되면 평균 단가 초기화
         if portfolio.current_quantity == 0:
             portfolio.average_price = Decimal('0')
+            # KRW 평균단가도 초기화
+            if hasattr(portfolio, 'krw_average_price'):
+                portfolio.krw_average_price = None
         
         from datetime import datetime
         portfolio.last_sell_date = datetime.now()
@@ -143,9 +161,11 @@ class PortfolioRepository(BaseRepository):
         total_stocks = len(portfolios)
         total_invested_amount = Decimal('0')
         total_current_value = Decimal('0')
-        
+        total_profit_loss = Decimal('0')
+
         for portfolio in portfolios:
             total_invested_amount += portfolio.current_quantity * portfolio.average_price
+            total_profit_loss += portfolio.krw_realized_profit_loss
             
             # TODO: 실제 주식 가격 조회 로직 필요
             # 임시로 평균 매수가를 현재가로 사용
@@ -153,7 +173,7 @@ class PortfolioRepository(BaseRepository):
             current_value = portfolio.current_quantity * current_price
             total_current_value += current_value
         
-        total_profit_loss = total_current_value - total_invested_amount
+        # total_profit_loss = total_current_value - total_invested_amount
         total_profit_loss_rate = (
             (total_profit_loss / total_invested_amount * 100) 
             if total_invested_amount > 0 else Decimal('0')

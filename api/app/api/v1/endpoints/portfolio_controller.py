@@ -14,11 +14,12 @@ from app.utils.simple_paging import SimplePage
 router = APIRouter()
 
 
-@router.get("/", response_model=PortfolioListResponse, summary="포트폴리오 조회")
+@router.get("", response_model=PortfolioListResponse, summary="포트폴리오 조회")
 async def get_portfolio(
     page: int = Query(1, ge=1, description="페이지 번호"),
     size: int = Query(20, ge=1, le=100, description="페이지 크기"),
     only_active: bool = Query(True, description="활성 보유 종목만 조회"),
+    include_orders: bool = Query(False, description="주문 정보 포함 여부"),
     current_user_id: str = Depends(get_current_user),
     portfolio_service: PortfolioService = Depends(get_portfolio_service)
 ):
@@ -33,7 +34,8 @@ async def get_portfolio(
             user_id=current_user_id,
             page=page,
             size=size,
-            only_active=only_active
+            only_active=only_active,
+            include_orders=include_orders
         )
         
         response = PortfolioListResponse.from_page_result(page_result)

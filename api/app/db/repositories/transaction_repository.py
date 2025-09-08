@@ -274,6 +274,30 @@ class TransactionRepository(BaseRepository):
             'total_count': buy_count + sell_count
         }
 
+    def get_realized_cost_krw_by_stock(self, user_id: str, stock_id: str) -> Decimal:
+        """특정 종목의 누적 실현원가(KRW)를 추정 계산합니다.
+        SELL 거래의 총액 - 원화 실현손익 = 원가 합계 (수수료/세금 포함 기준).
+        """
+        # SELL 총액 (amount, KRW 기준 저장됨)
+        sell_amount = self.session.query(func.sum(Transaction.amount)).filter(
+            and_(
+                Transaction.user_id == user_id,
+                Transaction.stock_id == stock_id,
+                Transaction.transaction_type == TransactionType.SELL
+            )
+        ).scalar() or Decimal('0')
+
+        # SELL의 KRW 실현손익 합계
+        realized_sum = self.session.query(func.sum(Transaction.krw_realized_profit_loss)).filter(
+            and_(
+                Transaction.user_id == user_id,
+                Transaction.stock_id == stock_id,
+                Transaction.transaction_type == TransactionType.SELL
+            )
+        ).scalar() or Decimal('0')
+
+        return sell_amount - realized_sum
+
 
 class TradingStatisticsRepository(BaseRepository):
     """거래 통계 레포지토리"""

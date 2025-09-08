@@ -24,7 +24,7 @@ async def list_available_roles():
     )
 
 
-@router.get("/", summary="역할 목록 조회", dependencies=[Depends(require_admin)])
+@router.get("", summary="역할 목록 조회", dependencies=[Depends(require_admin)])
 async def list_roles(role_service: RoleService = Depends(get_role_service)):
     """시스템에 등록된 모든 역할 목록을 반환합니다. (관리자 전용)"""
     try:
@@ -45,7 +45,7 @@ async def list_roles(role_service: RoleService = Depends(get_role_service)):
         )
 
 
-@router.post("/", summary="새 역할 생성", dependencies=[Depends(require_admin)])
+@router.post("", summary="새 역할 생성", dependencies=[Depends(require_admin)])
 async def create_role(role_data: RoleCreate, role_service: RoleService = Depends(get_role_service)):
     """새로운 역할을 생성합니다. (관리자 전용)"""
     try:

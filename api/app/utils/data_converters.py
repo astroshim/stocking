@@ -64,7 +64,7 @@ class DataConverters:
         return watchlist_data
     
     @staticmethod
-    def convert_portfolio_to_dict(portfolio: Portfolio) -> Dict[str, Any]:
+    def convert_portfolio_to_dict(portfolio: Portfolio, include_orders: bool = False) -> Dict[str, Any]:
         """포트폴리오를 딕셔너리로 변환"""
         # TODO: 실제 주식 가격 조회 로직 필요 (임시로 평균 매수가 사용)
         current_price = portfolio.average_price
@@ -108,26 +108,27 @@ class DataConverters:
         }
 
         # 주문 목록 변환 (간략 정보)
-        try:
-            orders = []
-            if hasattr(portfolio, 'orders') and portfolio.orders:
-                # created_at 기준으로 내림차순 정렬 (최신 주문이 먼저 오도록)
-                sorted_orders = sorted(portfolio.orders, key=lambda o: o.created_at, reverse=True)
-                for o in sorted_orders:
-                    orders.append({
-                        'id': o.id,
-                        'order_type': o.order_type,
-                        'order_method': o.order_method,
-                        'order_status': o.order_status,
-                        'quantity': o.quantity,
-                        'order_price': o.order_price,
-                        'currency': getattr(o, 'currency', 'KRW'),
-                        'exchange_rate': getattr(o, 'exchange_rate', None),
-                        'created_at': o.created_at,
-                    })
-            data['orders'] = orders
-        except Exception:
-            data['orders'] = []
+        if include_orders:
+            try:
+                orders = []
+                if hasattr(portfolio, 'orders') and portfolio.orders:
+                    # created_at 기준으로 내림차순 정렬 (최신 주문이 먼저 오도록)
+                    sorted_orders = sorted(portfolio.orders, key=lambda o: o.created_at, reverse=True)
+                    for o in sorted_orders:
+                        orders.append({
+                            'id': o.id,
+                            'order_type': o.order_type,
+                            'order_method': o.order_method,
+                            'order_status': o.order_status,
+                            'quantity': o.quantity,
+                            'order_price': o.order_price,
+                            'currency': getattr(o, 'currency', 'KRW'),
+                            'exchange_rate': getattr(o, 'exchange_rate', None),
+                            'created_at': o.created_at,
+                        })
+                data['orders'] = orders
+            except Exception:
+                data['orders'] = []
 
         return data
     

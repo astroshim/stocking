@@ -4,6 +4,7 @@ from decimal import Decimal
 from datetime import datetime, date
 
 from app.db.repositories.portfolio_repository import PortfolioRepository
+from app.db.repositories.transaction_repository import TransactionRepository
 from app.db.models.portfolio import Portfolio
 from app.utils.simple_paging import SimplePage
 from app.utils.data_converters import DataConverters
@@ -15,6 +16,7 @@ class PortfolioService:
     def __init__(self, db: Session):
         self.db = db
         self.portfolio_repo = PortfolioRepository(db)
+        self.transaction_repo = TransactionRepository(db)
         # watchlist 관련 로직은 WatchListService로 이동
 
     def get_user_portfolio(
@@ -22,10 +24,11 @@ class PortfolioService:
         user_id: str,
         page: int = 1,
         size: int = 20,
-        only_active: bool = True
+        only_active: bool = True,
+        include_orders: bool = False
     ) -> SimplePage:
         """사용자 포트폴리오 조회"""
-        portfolios = self.portfolio_repo.get_by_user_id(user_id, only_active, include_orders=True)
+        portfolios = self.portfolio_repo.get_by_user_id(user_id, only_active, include_orders)
         
         # 페이징 처리
         offset = (page - 1) * size
@@ -33,10 +36,23 @@ class PortfolioService:
         paged_portfolios = portfolios[offset:offset + size]
         
         # 포트폴리오 데이터 변환
-        portfolio_data = [
-            DataConverters.convert_portfolio_to_dict(portfolio)
-            for portfolio in paged_portfolios
-        ]
+        portfolio_data = []
+        for portfolio in paged_portfolios:
+            item = DataConverters.convert_portfolio_to_dict(portfolio, include_orders)
+            # 실현 손익률(%) = 누적 실현손익(KRW) / 누적 실현원가(KRW) * 100
+            try:
+                krw_realized = getattr(portfolio, 'krw_realized_profit_loss', None)
+                if krw_realized is not None:
+                    realized_cost = self.transaction_repo.get_realized_cost_krw_by_stock(portfolio.user_id, portfolio.product_code)
+                    if realized_cost and realized_cost > 0:
+                        item['realized_profit_loss_rate'] = float((Decimal(str(krw_realized)) / realized_cost) * Decimal('100'))
+                    else:
+                        item['realized_profit_loss_rate'] = None
+                else:
+                    item['realized_profit_loss_rate'] = None
+            except Exception:
+                item['realized_profit_loss_rate'] = None
+            portfolio_data.append(item)
         
         return SimplePage(
             items=portfolio_data,
@@ -87,4 +103,17 @@ class PortfolioService:
         if not portfolio:
             return None
         
-        return DataConverters.convert_portfolio_to_dict(portfolio)
+        item = DataConverters.convert_portfolio_to_dict(portfolio, include_orders=False)
+        try:
+            krw_realized = getattr(portfolio, 'krw_realized_profit_loss', None)
+            if krw_realized is not None:
+                realized_cost = self.transaction_repo.get_realized_cost_krw_by_stock(portfolio.user_id, product_code)
+                if realized_cost and realized_cost > 0:
+                    item['realized_profit_loss_rate'] = float((Decimal(str(krw_realized)) / realized_cost) * Decimal('100'))
+                else:
+                    item['realized_profit_loss_rate'] = None
+            else:
+                item['realized_profit_loss_rate'] = None
+        except Exception:
+            item['realized_profit_loss_rate'] = None
+        return item
