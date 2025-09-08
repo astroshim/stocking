@@ -56,6 +56,11 @@ class PortfolioRepository(BaseRepository):
         from app.db.models.portfolio import ProductType as _PT
         
         now = datetime.now()
+        
+        # 초기 총 구매금액 계산
+        total_buy_amount = average_price * quantity
+        krw_total_buy_amount = krw_average_price * quantity if krw_average_price else None
+        
         portfolio = Portfolio(
             user_id=user_id,
             product_code=product_code,
@@ -66,6 +71,8 @@ class PortfolioRepository(BaseRepository):
             base_currency=base_currency,
             current_quantity=quantity,
             average_price=average_price,
+            total_buy_amount=total_buy_amount,
+            krw_total_buy_amount=krw_total_buy_amount,
             average_exchange_rate=average_exchange_rate,
             krw_average_price=krw_average_price,
             first_buy_date=now,
@@ -81,13 +88,23 @@ class PortfolioRepository(BaseRepository):
         self,
         portfolio: Portfolio,
         quantity: int,
-        price: Decimal
+        price: Decimal,
+        krw_price: Optional[Decimal] = None
     ) -> Portfolio:
         """매수 시 포트폴리오 업데이트"""
         from datetime import datetime
         
-        # 평균 단가 계산 (총량/총원가 없이 이동평균)
-        new_total_amount = (portfolio.average_price * portfolio.current_quantity) + (price * quantity)
+        # 이번 매수 금액
+        buy_amount = price * quantity
+        krw_buy_amount = krw_price * quantity if krw_price else buy_amount
+        
+        # 총 구매금액 업데이트
+        portfolio.total_buy_amount = (portfolio.total_buy_amount or Decimal('0')) + buy_amount
+        if krw_price:
+            portfolio.krw_total_buy_amount = (portfolio.krw_total_buy_amount or Decimal('0')) + krw_buy_amount
+        
+        # 평균 단가 계산 (기존 로직 유지)
+        new_total_amount = (portfolio.average_price * portfolio.current_quantity) + buy_amount
         new_total_quantity = portfolio.current_quantity + quantity
         portfolio.average_price = (new_total_amount / new_total_quantity) if new_total_quantity > 0 else Decimal('0')
         portfolio.current_quantity = new_total_quantity

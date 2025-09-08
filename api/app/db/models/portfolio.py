@@ -34,6 +34,8 @@ class Portfolio(UUIDMixin, Base):
     # 보유 수량 및 가격 정보
     current_quantity = Column(Numeric(20, 8), nullable=False, default=0, comment='현재 보유 수량 (코인: 소수점 8자리)')
     average_price = Column(Numeric(20, 8), nullable=False, comment='평균 매수가 (현지통화 기준)')
+    total_buy_amount = Column(Numeric(20, 8), nullable=False, default=0, comment='총 구매금액 (현지통화 기준)')
+    krw_total_buy_amount = Column(Numeric(20, 2), nullable=True, comment='원화 환산 총 구매금액')
     
     # 환율 정보 (해외자산용)
     average_exchange_rate = Column(Numeric(10, 4), nullable=True, comment='평균 매수 시점 환율 (외화 -> KRW)')

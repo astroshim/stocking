@@ -566,7 +566,14 @@ class OrderService:
         if order.order_type == OrderType.BUY:
             if portfolio:
                 # 기존 포트폴리오가 있는 경우 매수 업데이트
-                self.portfolio_repository.update_portfolio_buy(portfolio, quantity, price)
+                # 원화 가격 계산 (해외자산의 경우 환율 적용)
+                krw_price = None
+                if order.currency and order.currency != 'KRW' and order.exchange_rate:
+                    krw_price = price * order.exchange_rate
+                elif order.currency == 'KRW' or not order.currency:
+                    krw_price = price
+                
+                self.portfolio_repository.update_portfolio_buy(portfolio, quantity, price, krw_price)
             else:
                 # 새로운 포트폴리오 생성 (상품/환율 정보 포함)
                 average_exchange_rate = None
