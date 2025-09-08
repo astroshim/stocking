@@ -14,6 +14,8 @@ class PortfolioResponse(InitVarModel):
     product_code: str
     product_name: str
     market: str
+    industry_code: Optional[str] = Field(None, description="업종 코드")
+    industry_display: Optional[str] = Field(None, description="업종명")
     quantity: Decimal
     average_buy_price: Decimal
     total_buy_amount: Decimal
@@ -44,6 +46,8 @@ class PortfolioResponse(InitVarModel):
             "product_code": "AAPL",
             "product_name": "Apple Inc.",
             "market": "NASDAQ",
+            "industry_code": "TECH_SEMICONDUCTOR",
+            "industry_display": "반도체",
             "quantity": 10,
             "average_buy_price": 150.00,
             "total_buy_amount": 1500.00,
@@ -88,10 +92,12 @@ class PortfolioListResponse(PagedResponse[PortfolioWithStockResponse]):
 
 class PortfolioSummaryResponse(BaseModel):
     total_stocks: int = Field(..., description="보유 종목 수")
-    total_invested_amount: Decimal = Field(..., description="총 투자 금액")
-    total_current_value: Decimal = Field(..., description="총 현재 가치")
-    total_profit_loss: Decimal = Field(..., description="총 손익")
-    total_profit_loss_rate: Decimal = Field(..., description="총 손익률")
+    total_invested_amount: Decimal = Field(..., description="총 투자 금액 (현지통화 합계)")
+    total_invested_amount_krw: Optional[Decimal] = Field(None, description="총 투자 금액 (KRW 환산 합계)")
+    total_current_value: Decimal = Field(..., description="총 현재 가치 (현지통화 합계 - 임시)")
+    total_current_value_krw: Optional[Decimal] = Field(None, description="총 현재 가치 (KRW 환산 합계 - 임시)")
+    total_profit_loss: Decimal = Field(..., description="총 손익 (KRW 기준)")
+    total_profit_loss_rate: Decimal = Field(..., description="총 손익률 (KRW 기준)")
     best_stock: Optional[str] = Field(None, description="최고 수익 종목")
     worst_stock: Optional[str] = Field(None, description="최저 수익 종목")
 

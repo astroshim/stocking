@@ -57,14 +57,22 @@ class OrderService:
             
             # 모델 호환성: stock_id -> product_code 매핑 및 기본 상품 정보 설정
             order_data['product_code'] = stock_id
-            # 종목 개요 조회로 product_name, market(한국어 우선) 설정
+            # 업종 정보 초기화 및 종목 개요 조회로 product_name, market(한국어 우선) 설정
+            industry_code = None
+            industry_display = None
             try:
                 overview_raw = self.toss_proxy_service.get_stock_overview(stock_id)
                 ov = overview_raw.get('result') if isinstance(overview_raw, dict) else None
                 company = (ov or {}).get('company', {}) if isinstance(ov, dict) else {}
                 market_info = (ov or {}).get('market', {}) if isinstance(ov, dict) else {}
-                product_name = company.get('fullName') or company.get('name') or order_data.get('product_name') or stock_id
-                market_display = market_info.get('displayName') or market_info.get('code') or order_data.get('market') or 'UNKNOWN'
+                product_name = company.get('fullName') or company.get('name') 
+                market_display = market_info.get('displayName') or market_info.get('code') or ''
+                industry = company.get('industry', {}) if isinstance(ov, dict) else {}
+                industry_code = industry.get('code')
+                industry_display = industry.get('displayName') 
+
+                logging.info(f"##> industry_code: {industry_code}, industry_display: {industry_display}")
+
                 order_data['product_name'] = product_name
                 order_data['market'] = market_display
             except Exception:
@@ -103,6 +111,14 @@ class OrderService:
             
             # 주문 생성
             order = self.order_repository.create_order(order_data)
+            # 업종 정보는 Order 모델 컬럼이 아니므로 임시 속성으로 보관(포트폴리오 생성 시 사용)
+            try:
+                if industry_code:
+                    setattr(order, 'industry_code', industry_code)
+                if industry_display:
+                    setattr(order, 'industry_display', industry_display)
+            except Exception:
+                pass
             
             # 시장가 주문인 경우 즉시 체결 시뮬레이션
             # (이미 create_order에서 현재가를 조회했으므로 중복 조회 없음)
@@ -596,6 +612,8 @@ class OrderService:
                     base_currency=getattr(order, 'currency', None),
                     average_exchange_rate=average_exchange_rate,
                     krw_average_price=krw_average_price,
+                    industry_code=getattr(order, 'industry_code', None),
+                    industry_display=getattr(order, 'industry_display', None),
                 )
             order.portfolio_id = portfolio.id
                 

@@ -14,8 +14,8 @@ from app.api.v1.schemas.stock_schemas import StockPriceDetailsResponse
 router = APIRouter()
 
 def _assert_product_code(product_code: str):
-    if not (isinstance(product_code, str) and (product_code.startswith('US') or product_code.startswith('A'))):
-        raise HTTPException(status_code=400, detail="product_code는 'US' 또는 'A'로 시작해야 합니다")
+    if not (isinstance(product_code, str) and (product_code.startswith('US') or product_code.startswith('A') or product_code.startswith('NAS'))):
+        raise HTTPException(status_code=400, detail="product_code는 'US' 또는 'A', 'NAS' 로 시작해야 합니다")
 
 
 # <주식 골라보기 목록>

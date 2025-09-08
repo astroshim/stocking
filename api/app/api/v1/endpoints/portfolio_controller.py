@@ -56,7 +56,9 @@ async def get_portfolio_summary(
         summary = PortfolioSummaryResponse(
             total_stocks=summary_data['total_stocks'],
             total_invested_amount=float(summary_data['total_invested_amount']),
+            total_invested_amount_krw=float(summary_data['total_invested_amount_krw']) if summary_data.get('total_invested_amount_krw') is not None else None,
             total_current_value=float(summary_data['total_current_value']),
+            total_current_value_krw=float(summary_data['total_current_value_krw']) if summary_data.get('total_current_value_krw') is not None else None,
             total_profit_loss=float(summary_data['total_profit_loss']),
             total_profit_loss_rate=float(summary_data['total_profit_loss_rate'])
         )

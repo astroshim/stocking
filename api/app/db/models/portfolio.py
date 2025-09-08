@@ -26,6 +26,9 @@ class Portfolio(UUIDMixin, Base):
     
     # 시장/거래소 정보
     market = Column(String(50), nullable=False, comment='시장/거래소 (KOSPI, NASDAQ, Upbit, Binance)')
+    # 업종 정보
+    industry_code = Column(String(50), nullable=True, comment='업종 코드')
+    industry_display = Column(String(100), nullable=True, comment='업종명')
     
     # 코인 특화 정보 (주식의 경우 NULL)
     symbol = Column(String(10), nullable=True, comment='코인 심볼 (BTC, ETH, ADA)')

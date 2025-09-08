@@ -50,6 +50,8 @@ class PortfolioRepository(BaseRepository):
         base_currency: Optional[str] = None,
         average_exchange_rate: Optional[Decimal] = None,
         krw_average_price: Optional[Decimal] = None,
+        industry_code: Optional[str] = None,
+        industry_display: Optional[str] = None,
     ) -> Portfolio:
         """새 포트폴리오 생성 (product_code 기반)"""
         from datetime import datetime
@@ -67,6 +69,8 @@ class PortfolioRepository(BaseRepository):
             product_code=product_code,
             product_name=product_name or product_code,
             market=market or "UNKNOWN",
+            industry_code=industry_code,
+            industry_display=industry_display,
             product_type=product_type or _PT.STOCK,
             symbol=symbol,
             base_currency=base_currency,
@@ -155,35 +159,45 @@ class PortfolioRepository(BaseRepository):
         return portfolio
 
     def get_portfolio_summary(self, user_id: str) -> dict:
-        """포트폴리오 요약 정보 조회"""
+        """포트폴리오 요약 정보 조회 (현지통화/원화 동시 집계, 손익은 KRW 기준)"""
         portfolios = self.get_by_user_id(user_id, only_active=True, include_orders=False)
         
         total_stocks = len(portfolios)
-        total_invested_amount = Decimal('0')
-        total_current_value = Decimal('0')
-        total_profit_loss = Decimal('0')
+        total_invested_amount = Decimal('0')  # 현지통화 합계
+        total_invested_amount_krw = Decimal('0')  # KRW 합계
+        total_current_value = Decimal('0')  # 현지통화 합계 (임시)
+        total_current_value_krw = Decimal('0')  # KRW 합계 (임시)
+        total_profit_loss_krw = Decimal('0')  # KRW 기준 손익 (누적 실현손익 합)
 
         for portfolio in portfolios:
+            # 투자금액: 평균매수가 * 수량
             total_invested_amount += portfolio.current_quantity * portfolio.average_price
-            total_profit_loss += portfolio.krw_realized_profit_loss
-            
-            # TODO: 실제 주식 가격 조회 로직 필요
-            # 임시로 평균 매수가를 현재가로 사용
-            current_price = portfolio.average_price  # 임시 값
+            if getattr(portfolio, 'krw_average_price', None) is not None:
+                total_invested_amount_krw += (portfolio.current_quantity * portfolio.krw_average_price)
+
+            # 현재가치(임시): 평균가를 현재가로 사용 중
+            current_price = portfolio.average_price
             current_value = portfolio.current_quantity * current_price
             total_current_value += current_value
+            if getattr(portfolio, 'krw_average_price', None) is not None:
+                total_current_value_krw += (portfolio.current_quantity * portfolio.krw_average_price)
+
+            # 누적 실현 손익 (KRW)
+            total_profit_loss_krw += (portfolio.krw_realized_profit_loss or Decimal('0'))
         
-        # total_profit_loss = total_current_value - total_invested_amount
+        # 손익률 (KRW 기준): 실현손익 / (KRW 투자금액) * 100
         total_profit_loss_rate = (
-            (total_profit_loss / total_invested_amount * 100) 
-            if total_invested_amount > 0 else Decimal('0')
+            (total_profit_loss_krw / total_invested_amount_krw * 100)
+            if total_invested_amount_krw > 0 else Decimal('0')
         )
         
         return {
             'total_stocks': total_stocks,
             'total_invested_amount': total_invested_amount,
+            'total_invested_amount_krw': total_invested_amount_krw if total_invested_amount_krw > 0 else None,
             'total_current_value': total_current_value,
-            'total_profit_loss': total_profit_loss,
+            'total_current_value_krw': total_current_value_krw if total_current_value_krw > 0 else None,
+            'total_profit_loss': total_profit_loss_krw,
             'total_profit_loss_rate': total_profit_loss_rate
         }
 
@@ -195,28 +209,55 @@ class PortfolioRepository(BaseRepository):
         total_value = Decimal('0')
         
         for portfolio in portfolios:
-            # TODO: 실제 주식 가격 및 섹터 정보 조회 필요
-            current_price = portfolio.average_price  # 임시 값
+            # 현재가치 (임시: 평균가 사용)
+            current_price = portfolio.average_price
             current_value = portfolio.current_quantity * current_price
-            sector = "기타"  # 임시 값 (stock 정보 없음)
-            
-            if sector not in sector_data:
-                sector_data[sector] = {
-                    'sector': sector,
+
+            # industry_code 기준 그룹핑, null은 "기타"
+            code = getattr(portfolio, 'industry_code', None) or '기타'
+            display = getattr(portfolio, 'industry_display', None) or '기타'
+
+            if code not in sector_data:
+                sector_data[code] = {
+                    'industry_code': code,
+                    'industry_display': display,
                     'value': Decimal('0'),
-                    'count': 0
+                    'count': 0,
+                    'invested_krw': Decimal('0'),
+                    'realized_krw': Decimal('0')
                 }
-            
-            sector_data[sector]['value'] += current_value
-            sector_data[sector]['count'] += 1
+
+            sector_data[code]['value'] += current_value
+            sector_data[code]['count'] += 1
+            # 최신 display가 있는 경우 보강
+            if display and sector_data[code].get('industry_display') in (None, '기타'):
+                sector_data[code]['industry_display'] = display
+
+            # 투자 원가(KRW) 및 누적 실현손익(KRW) 합산
+            if getattr(portfolio, 'krw_average_price', None) is not None:
+                sector_data[code]['invested_krw'] += (portfolio.current_quantity * portfolio.krw_average_price)
+            sector_data[code]['realized_krw'] += (portfolio.krw_realized_profit_loss or Decimal('0'))
+
             total_value += current_value
         
         # 비율 계산
+        # 전체 실현손익(KRW) 합계 (0 분모 방지)
+        total_realized_krw = sum((info.get('realized_krw', Decimal('0')) for info in sector_data.values()), Decimal('0'))
+
         for sector_info in sector_data.values():
             sector_info['percentage'] = (
-                float(sector_info['value'] / total_value * 100) 
+                float(sector_info['value'] / total_value * 100)
                 if total_value > 0 else 0
             )
+            # 숫자 직렬화 안정화: Decimal -> float
+            sector_info['value'] = float(sector_info['value'])
+            # 섹터별 손익(실현) 및 손익률(KRW 기준)
+            invested_krw = sector_info.pop('invested_krw', Decimal('0'))
+            realized_krw = sector_info.pop('realized_krw', Decimal('0'))
+            sector_info['profit_loss'] = float(realized_krw)
+            sector_info['profit_loss_rate'] = float((realized_krw / invested_krw * 100) if invested_krw > 0 else 0)
+            # 전체 실현손익 대비 비중 (%)
+            sector_info['profit_loss_percentage_of_total'] = float((realized_krw / total_realized_krw * 100) if total_realized_krw != 0 else 0)
         
         return list(sector_data.values())
 
@@ -229,19 +270,24 @@ class PortfolioRepository(BaseRepository):
             # TODO: 실제 주식 정보 조회 필요
             current_price = portfolio.average_price  # 임시 값
             current_value = portfolio.current_quantity * current_price
-            profit_loss = current_value - (portfolio.current_quantity * portfolio.average_price)
-            profit_loss_rate = (
-                (profit_loss / (portfolio.current_quantity * portfolio.average_price) * 100)
-                if portfolio.average_price > 0 else 0
-            )
+
+            # 손익(KRW 기준): 누적 실현손익 사용 (실시간 미연동 환경 대응)
+            profit_loss_krw = (portfolio.krw_realized_profit_loss or Decimal('0'))
+            # 손익률 분모: 현재 보유 원가(KRW). krw_total_buy_amount가 있으면 사용, 없으면 krw_average_price 기반 계산
+            invested_krw = portfolio.krw_total_buy_amount
+            if not invested_krw and getattr(portfolio, 'krw_average_price', None) is not None:
+                invested_krw = portfolio.current_quantity * portfolio.krw_average_price
+            profit_loss_rate = (float((profit_loss_krw / invested_krw) * 100) if invested_krw and invested_krw > 0 else 0.0)
             
             holdings.append({
                 'product_code': portfolio.product_code,
                 'product_name': portfolio.product_name,
-                'quantity': portfolio.current_quantity,
-                'current_value': current_value,
-                'profit_loss': profit_loss,
-                'profit_loss_rate': profit_loss_rate
+                'industry_code': getattr(portfolio, 'industry_code', None),
+                'industry_display': getattr(portfolio, 'industry_display', None),
+                'quantity': float(portfolio.current_quantity),
+                'current_value': float(current_value),
+                'profit_loss': float(profit_loss_krw),
+                'profit_loss_rate': float(profit_loss_rate)
             })
         
         # 현재 가치 기준 내림차순 정렬

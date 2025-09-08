@@ -80,12 +80,13 @@ class PortfolioService:
         }
         
         # 리스크 지표 (간단한 계산)
+        total_current_value_float = float(summary['total_current_value']) if summary['total_current_value'] is not None else 0.0
+        max_holding_value = max([holding.get('current_value', 0.0) for holding in top_holdings], default=0.0)
         risk_metrics = {
             'diversification_score': len(sector_allocation),  # 섹터 다양성
             'concentration_risk': (
-                max([holding['current_value'] for holding in top_holdings], default=0) / 
-                summary['total_current_value'] * 100
-                if summary['total_current_value'] > 0 else 0
+                (max_holding_value / total_current_value_float * 100.0)
+                if total_current_value_float > 0.0 else 0.0
             )
         }
         

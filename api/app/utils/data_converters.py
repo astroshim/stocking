@@ -83,6 +83,8 @@ class DataConverters:
             'product_code': portfolio.product_code,
             'product_name': portfolio.product_name,
             'market': portfolio.market,
+            'industry_code': getattr(portfolio, 'industry_code', None),
+            'industry_display': getattr(portfolio, 'industry_display', None),
             'quantity': portfolio.current_quantity,
             'average_buy_price': portfolio.average_price,
             'total_buy_amount': float(portfolio.total_buy_amount or 0),
