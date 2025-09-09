@@ -5,7 +5,6 @@ from sqlalchemy.orm import relationship
 from app.config.db import Base
 from app.db.models.uuid_mixin import UUIDMixin
 
-
 class VirtualBalance(UUIDMixin, Base):
     """가상 거래 잔고"""
     __tablename__ = 'virtual_balances'
