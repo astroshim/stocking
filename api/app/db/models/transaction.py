@@ -25,6 +25,9 @@ class Transaction(UUIDMixin, Base):
     user_id = Column(String(36), ForeignKey('users.id'), nullable=False, comment='사용자 ID')
     stock_id = Column(String(20), nullable=True, comment='주식 종목 코드 (주식 거래시, 예: 097230)')
     order_id = Column(String(36), ForeignKey('orders.id'), nullable=True, comment='주문 ID (주문 관련 거래시)')
+    # 업종 정보
+    industry_code = Column(String(50), nullable=True, comment='업종 코드')
+    industry_display = Column(String(100), nullable=True, comment='업종명')
     
     transaction_type = Column(SQLEnum(TransactionType), nullable=False, comment='거래 유형')
     

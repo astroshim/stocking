@@ -450,8 +450,6 @@ class OrderService:
 
     def _update_virtual_balance_for_execution(self, order: Order, execution) -> None:
         """체결에 따라 가상 잔고를 업데이트합니다."""
-        execution_amount = execution.execution_amount
-
         if order.order_type == OrderType.BUY:
             # 금액 단위 통일: KRW 기준으로 실행 금액 산정
             if (order.currency or 'KRW') == 'KRW':
@@ -484,11 +482,8 @@ class OrderService:
 
             # 현금 잔고는 실제 결제금액만큼 감소
             virtual_balance.cash_balance -= actual_for_executed_krw
-            # 총계 누적 및 원가(=체결금액) 투자 증가
-            virtual_balance.total_buy_amount += executed_amount_krw
-            virtual_balance.total_commission += actual_commission_krw
-            virtual_balance.total_tax += actual_tax_krw
-            virtual_balance.invested_amount += executed_amount_krw
+            # 매수 시 투자금액 증가 (체결금액만큼)
+            virtual_balance.invested_amount = (virtual_balance.invested_amount or Decimal('0')) + executed_amount_krw
             # 이력 기록 (BUY)
             try:
                 self.virtual_balance_repository._add_balance_history(
@@ -522,10 +517,25 @@ class OrderService:
             previous_cash = virtual_balance.cash_balance
             virtual_balance.cash_balance += net_amount_krw
             virtual_balance.available_cash += net_amount_krw
-            # 총계 누적 (KRW 기준)
-            virtual_balance.total_sell_amount += executed_amount_krw
-            virtual_balance.total_commission += commission_krw
-            virtual_balance.total_tax += tax_krw
+            # 매도 시 투자금액 감소 (매도한 종목의 원가만큼)
+            # 포트폴리오에서 매도 수량에 해당하는 원가 계산
+            portfolio = self.portfolio_repository.get_by_user_and_stock(order.user_id, self._get_product_code(order))
+            if portfolio:
+                # 매도 수량에 대한 원가 계산 (KRW 기준)
+                if portfolio.krw_average_price:
+                    sold_cost_krw = portfolio.krw_average_price * execution.execution_quantity
+                elif portfolio.average_price:
+                    # KRW 평균가가 없으면 현재 환율로 계산
+                    if order.currency and order.currency != 'KRW':
+                        rate = order.exchange_rate or self.toss_proxy_service.get_exchange_rate(order.currency)
+                        sold_cost_krw = portfolio.average_price * execution.execution_quantity * rate
+                    else:
+                        sold_cost_krw = portfolio.average_price * execution.execution_quantity
+                else:
+                    sold_cost_krw = Decimal('0')
+                
+                virtual_balance.invested_amount = max(Decimal('0'), 
+                    (virtual_balance.invested_amount or Decimal('0')) - sold_cost_krw)
             # 이력 기록 (SELL)
             try:
                 self.virtual_balance_repository._add_balance_history(

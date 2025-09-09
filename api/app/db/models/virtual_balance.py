@@ -17,12 +17,6 @@ class VirtualBalance(UUIDMixin, Base):
     available_cash = Column(Numeric(20, 2), nullable=False, default=0, comment='사용 가능한 현금 (주문 대기 중인 금액 제외)')
     invested_amount = Column(Numeric(20, 2), nullable=False, default=0, comment='투자 금액(원가 기준 확정값)')
     
-    # 거래 통계
-    total_buy_amount = Column(Numeric(20, 2), nullable=False, default=0, comment='총 매수 금액')
-    total_sell_amount = Column(Numeric(20, 2), nullable=False, default=0, comment='총 매도 금액')
-    total_commission = Column(Numeric(10, 2), nullable=False, default=0, comment='총 수수료')
-    total_tax = Column(Numeric(10, 2), nullable=False, default=0, comment='총 세금')
-    
     # 시간 정보
     last_trade_date = Column(DateTime, nullable=True, comment='마지막 거래일')
     last_updated_at = Column(DateTime, nullable=False, default=datetime.now, comment='마지막 업데이트 시간')

@@ -29,7 +29,9 @@ class TransactionRepository(BaseRepository):
         cash_balance_after: Decimal = Decimal('0'),
         description: Optional[str] = None,
         realized_profit_loss: Optional[Decimal] = None,
-        krw_realized_profit_loss: Optional[Decimal] = None
+        krw_realized_profit_loss: Optional[Decimal] = None,
+        industry_code: Optional[str] = None,
+        industry_display: Optional[str] = None
     ) -> Transaction:
         """거래 내역 생성"""
         net_amount = amount - commission - tax
@@ -51,7 +53,9 @@ class TransactionRepository(BaseRepository):
             transaction_date=datetime.now(),
             is_simulated=True,
             realized_profit_loss=realized_profit_loss,
-            krw_realized_profit_loss=krw_realized_profit_loss
+            krw_realized_profit_loss=krw_realized_profit_loss,
+            industry_code=industry_code,
+            industry_display=industry_display
         )
         
         self.session.add(transaction)

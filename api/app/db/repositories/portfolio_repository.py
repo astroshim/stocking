@@ -207,7 +207,7 @@ class PortfolioRepository(BaseRepository):
         
         sector_data = {}
         total_value = Decimal('0')
-        
+
         for portfolio in portfolios:
             # 현재가치 (임시: 평균가 사용)
             current_price = portfolio.average_price

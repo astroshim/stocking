@@ -4,6 +4,10 @@ from decimal import Decimal
 from datetime import datetime
 
 from app.db.repositories.virtual_balance_repository import VirtualBalanceRepository
+from app.db.repositories.portfolio_repository import PortfolioRepository
+from app.db.models.portfolio import Portfolio
+from app.db.models.transaction import Transaction, TransactionType
+from sqlalchemy import func
 from app.db.models.virtual_balance import VirtualBalance, VirtualBalanceHistory
 from app.services.payment_service import PaymentService
 from app.api.v1.schemas.virtual_balance_schema import BalanceUpdateRequest
@@ -16,6 +20,7 @@ class BalanceService:
         self.db = db
         self.virtual_balance_repo = VirtualBalanceRepository(db)
         self.payment_service = PaymentService(db)
+        self.portfolio_repo = PortfolioRepository(db)
     
     def get_virtual_balance(self, user_id: str) -> Optional[VirtualBalance]:
         """
@@ -202,7 +207,7 @@ class BalanceService:
             잔고 요약 정보
         """
         virtual_balance = self.get_virtual_balance(user_id)
-        
+
         if not virtual_balance:
             return {
                 'total_balance': 0,
@@ -214,19 +219,40 @@ class BalanceService:
                 'total_buy_amount': 0,
                 'total_sell_amount': 0
             }
-        
-        # 손익은 총 매도금액 - 총 매수금액으로 계산
-        total_profit_loss = float(virtual_balance.total_sell_amount) - float(virtual_balance.total_buy_amount)
-        
+
+        # invested_amount는 VirtualBalance에서 직접 가져오기 (매수/매도 시 업데이트되는 값)
+        invested_amount = virtual_balance.invested_amount or Decimal('0')
+
+        # 거래 기준 총계 (Transaction에서 집계)
+        buy_amount = self.db.query(func.sum(Transaction.amount)).filter(
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.BUY
+        ).scalar() or Decimal('0')
+
+        sell_amount = self.db.query(func.sum(Transaction.amount)).filter(
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.SELL
+        ).scalar() or Decimal('0')
+
+        total_commission = self.db.query(func.sum(Transaction.commission)).filter(
+            Transaction.user_id == user_id
+        ).scalar() or Decimal('0')
+
+        total_tax = self.db.query(func.sum(Transaction.tax)).filter(
+            Transaction.user_id == user_id
+        ).scalar() or Decimal('0')
+
+        total_profit_loss = float(sell_amount - buy_amount - total_commission - total_tax)
+
         return {
             'total_balance': float(virtual_balance.cash_balance),
             'available_cash': float(virtual_balance.available_cash),
-            'invested_amount': float(virtual_balance.invested_amount),
+            'invested_amount': float(invested_amount),
             'total_profit_loss': total_profit_loss,
-            'total_commission': float(virtual_balance.total_commission),
-            'total_tax': float(virtual_balance.total_tax),
-            'total_buy_amount': float(virtual_balance.total_buy_amount),
-            'total_sell_amount': float(virtual_balance.total_sell_amount),
+            'total_commission': float(total_commission),
+            'total_tax': float(total_tax),
+            'total_buy_amount': float(buy_amount),
+            'total_sell_amount': float(sell_amount),
             'last_trade_date': virtual_balance.last_trade_date.isoformat() if virtual_balance.last_trade_date else None,
             'last_updated_at': virtual_balance.last_updated_at.isoformat() if virtual_balance.last_updated_at else None
         }

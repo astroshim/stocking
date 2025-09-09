@@ -48,7 +48,8 @@ def notice_service_factory(db: Session = None):
 def portfolio_service_factory(db: Session = None):
     """PortfolioService 인스턴스 생성을 위한 팩토리 함수"""
     from app.services.portfolio_service import PortfolioService
-    return PortfolioService(db)
+    toss_proxy_service = TossProxyService()
+    return PortfolioService(db, toss_proxy_service)
 
 
 def balance_service_factory(db: Session = None):

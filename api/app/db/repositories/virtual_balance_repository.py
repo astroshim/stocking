@@ -25,11 +25,7 @@ class VirtualBalanceRepository(BaseRepository):
             user_id=user_id,
             cash_balance=initial_cash,
             available_cash=initial_cash,
-            invested_amount=Decimal('0'),
-            total_buy_amount=Decimal('0'),
-            total_sell_amount=Decimal('0'),
-            total_commission=Decimal('0'),
-            total_tax=Decimal('0')
+            invested_amount=Decimal('0')
         )
         
         self.session.add(virtual_balance)
@@ -102,44 +98,44 @@ class VirtualBalanceRepository(BaseRepository):
         
         return virtual_balance
     
-    def update_balance_for_trade(
-        self, 
-        user_id: str, 
-        cash_change: Decimal, 
-        invested_change: Decimal,
-        order_id: str = None,
-        description: str = None
-    ) -> VirtualBalance:
-        """거래에 따른 잔고 업데이트"""
-        virtual_balance = self.get_by_user_id(user_id)
-        if not virtual_balance:
-            raise ValueError("Virtual balance not found")
+    # def update_balance_for_trade(
+    #     self, 
+    #     user_id: str, 
+    #     cash_change: Decimal, 
+    #     invested_change: Decimal,
+    #     order_id: str = None,
+    #     description: str = None
+    # ) -> VirtualBalance:
+    #     """거래에 따른 잔고 업데이트"""
+    #     virtual_balance = self.get_by_user_id(user_id)
+    #     if not virtual_balance:
+    #         raise ValueError("Virtual balance not found")
         
-        previous_cash = virtual_balance.cash_balance
-        virtual_balance.cash_balance += cash_change
-        virtual_balance.available_cash += cash_change
-        virtual_balance.invested_amount += invested_change
-        virtual_balance.last_updated_at = datetime.now()
+    #     previous_cash = virtual_balance.cash_balance
+    #     virtual_balance.cash_balance += cash_change
+    #     virtual_balance.available_cash += cash_change
+    #     virtual_balance.invested_amount += invested_change
+    #     virtual_balance.last_updated_at = datetime.now()
         
-        # 매수/매도 금액 업데이트
-        if cash_change < 0:  # 매수 (현금 감소)
-            virtual_balance.total_buy_amount += abs(cash_change)
-        else:  # 매도 (현금 증가)
-            virtual_balance.total_sell_amount += cash_change
+    #     # 매수/매도 금액 업데이트
+    #     if cash_change < 0:  # 매수 (현금 감소)
+    #         virtual_balance.total_buy_amount += abs(cash_change)
+    #     else:  # 매도 (현금 증가)
+    #         virtual_balance.total_sell_amount += cash_change
         
-        # 이력 추가
-        change_type = 'BUY' if cash_change < 0 else 'SELL'
-        self._add_balance_history(
-            virtual_balance_id=virtual_balance.id,
-            previous_cash=previous_cash,
-            new_cash=virtual_balance.cash_balance,
-            change_amount=cash_change,
-            change_type=change_type,
-            related_order_id=order_id,
-            description=description or f'{change_type} 거래'
-        )
+    #     # 이력 추가
+    #     change_type = 'BUY' if cash_change < 0 else 'SELL'
+    #     self._add_balance_history(
+    #         virtual_balance_id=virtual_balance.id,
+    #         previous_cash=previous_cash,
+    #         new_cash=virtual_balance.cash_balance,
+    #         change_amount=cash_change,
+    #         change_type=change_type,
+    #         related_order_id=order_id,
+    #         description=description or f'{change_type} 거래'
+    #     )
         
-        return virtual_balance
+    #     return virtual_balance
     
     def get_balance_history(self, user_id: str, limit: int = 100) -> List[VirtualBalanceHistory]:
         """잔고 변동 이력 조회"""

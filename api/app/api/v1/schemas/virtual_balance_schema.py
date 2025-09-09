@@ -21,10 +21,6 @@ class VirtualBalanceResponse(InitVarModel):
     cash_balance: Decimal
     available_cash: Decimal
     invested_amount: Decimal
-    total_buy_amount: Decimal
-    total_sell_amount: Decimal
-    total_commission: Decimal
-    total_tax: Decimal
     last_trade_date: Optional[datetime]
     last_updated_at: datetime
     created_at: datetime

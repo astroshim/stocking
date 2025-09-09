@@ -88,7 +88,9 @@ class TransactionService:
             cash_balance_after=cash_balance_after,
             description=desc,
             realized_profit_loss=realized_profit_loss,
-            krw_realized_profit_loss=krw_realized_profit_loss
+            krw_realized_profit_loss=krw_realized_profit_loss,
+            industry_code=getattr(order, 'industry_code', None),
+            industry_display=getattr(order, 'industry_display', None)
         )
         
         return transaction
