@@ -108,3 +108,13 @@ class PortfolioAnalysisResponse(BaseModel):
     top_holdings: List[dict] = Field(..., description="상위 보유 종목")
     performance_metrics: dict = Field(..., description="성과 지표")
     risk_metrics: dict = Field(..., description="리스크 지표")
+
+
+class PortfolioDashboardResponse(BaseModel):
+    """포트폴리오 대시보드 응답"""
+    total_invested_amount: Decimal = Field(..., description="원금 (투자금액)")
+    total_current_value: Decimal = Field(..., description="현재 총 평가금액")
+    total_profit_loss: Decimal = Field(..., description="총 수익금 (평가금 - 원금)")
+    total_profit_loss_rate: Decimal = Field(..., description="총 수익률 (%)")
+    daily_profit_loss: Decimal = Field(..., description="일간 손익금")
+    daily_profit_loss_rate: Decimal = Field(..., description="일간 손익률 (%)")

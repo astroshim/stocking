@@ -6,7 +6,7 @@ from app.config.di import get_portfolio_service
 from app.services.portfolio_service import PortfolioService
 from app.api.v1.schemas.portfolio_schema import (
     PortfolioResponse, PortfolioWithStockResponse, PortfolioListResponse, PortfolioSummaryResponse,
-    PortfolioAnalysisResponse
+    PortfolioAnalysisResponse, PortfolioDashboardResponse
 )
 from app.utils.response_helper import create_response
 from app.utils.simple_paging import SimplePage
@@ -112,6 +112,40 @@ async def get_portfolio_by_stock(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"종목별 포트폴리오 조회 실패: {str(e)}")
+
+
+@router.get("/dashboard", response_model=PortfolioDashboardResponse, summary="포트폴리오 대시보드")
+async def get_portfolio_dashboard(
+    current_user_id: str = Depends(get_current_user),
+    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+):
+    """
+    포트폴리오 대시보드 정보를 조회합니다.
+    
+    포함되는 정보:
+    - 현재 총 투자금액 (원금)
+    - 현재 총 평가금액
+    - 총 수익금 (평가금 - 원금)
+    - 총 수익률 (%)
+    - 일간 손익금 (각 종목의 일간 손익금의 합)
+    - 일간 손익률 (%)
+    
+    * 해외 주식의 경우 현재 환율을 적용하여 계산합니다.
+    """
+    try:
+        dashboard_data = portfolio_service.get_portfolio_dashboard(current_user_id)
+        
+        dashboard = PortfolioDashboardResponse(
+            total_invested_amount=dashboard_data['total_invested_amount'],
+            total_current_value=dashboard_data['total_current_value'],
+            total_profit_loss=dashboard_data['total_profit_loss'],
+            total_profit_loss_rate=dashboard_data['total_profit_loss_rate'],
+            daily_profit_loss=dashboard_data['daily_profit_loss'],
+            daily_profit_loss_rate=dashboard_data['daily_profit_loss_rate']
+        )
+        return create_response(dashboard.model_dump(), message="포트폴리오 대시보드 조회 성공")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"포트폴리오 대시보드 조회 실패: {str(e)}")
 
 
 

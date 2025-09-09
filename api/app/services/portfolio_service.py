@@ -210,3 +210,117 @@ class PortfolioService:
         except Exception:
             item['realized_profit_loss_rate'] = None
         return item
+    
+    def get_portfolio_dashboard(self, user_id: str) -> Dict[str, Any]:
+        """
+        포트폴리오 대시보드 정보를 조회합니다.
+        - 원금, 평가금액, 총수익
+        - 일간 손익금/손익률
+        """
+        portfolios = self.portfolio_repo.get_by_user_id(user_id, only_active=True, include_orders=False)
+        
+        if not portfolios:
+            return {
+                'total_invested_amount': 0,
+                'total_current_value': 0,
+                'total_profit_loss': 0,
+                'total_profit_loss_rate': 0,
+                'daily_profit_loss': 0,
+                'daily_profit_loss_rate': 0
+            }
+        
+        # 환율 정보를 미리 캐싱 (중복 API 호출 방지)
+        exchange_rates = {}
+        for portfolio in portfolios:
+            if portfolio.base_currency and portfolio.base_currency != 'KRW':
+                if portfolio.base_currency not in exchange_rates:
+                    if self.toss_proxy_service:
+                        try:
+                            exchange_rates[portfolio.base_currency] = self.toss_proxy_service.get_exchange_rate(portfolio.base_currency)
+                        except Exception:
+                            # 환율 조회 실패시 저장된 평균 환율 사용
+                            if portfolio.average_exchange_rate:
+                                exchange_rates[portfolio.base_currency] = portfolio.average_exchange_rate
+                            else:
+                                exchange_rates[portfolio.base_currency] = Decimal('1')
+                    elif portfolio.average_exchange_rate:
+                        exchange_rates[portfolio.base_currency] = portfolio.average_exchange_rate
+                    else:
+                        exchange_rates[portfolio.base_currency] = Decimal('1')
+        
+        total_invested_krw = Decimal('0')  # 원금 (KRW)
+        total_current_value_krw = Decimal('0')  # 현재 평가금액 (KRW)
+        daily_profit_loss_krw = Decimal('0')  # 일간 손익금 (KRW)
+        
+        for portfolio in portfolios:
+            if portfolio.current_quantity <= 0:
+                continue
+            
+            # 원금 계산 (KRW 기준)
+            if portfolio.krw_average_price:
+                position_cost_krw = portfolio.krw_average_price * portfolio.current_quantity
+            elif portfolio.average_price:
+                position_cost_krw = portfolio.average_price * portfolio.current_quantity
+                # 해외 주식인 경우 캐싱된 환율 적용
+                if portfolio.base_currency and portfolio.base_currency != 'KRW':
+                    exchange_rate = exchange_rates.get(portfolio.base_currency, Decimal('1'))
+                    position_cost_krw = position_cost_krw * exchange_rate
+            else:
+                position_cost_krw = Decimal('0')
+            
+            total_invested_krw += position_cost_krw
+            
+            # 현재가 및 전일 종가 가져오기
+            current_price = None
+            previous_close = None
+            
+            if self.toss_proxy_service:
+                try:
+                    # Toss API에서 실시간 가격 및 전일 종가 조회
+                    stock_info = self.toss_proxy_service.get_stock_price(portfolio.product_code)
+                    if stock_info:
+                        current_price = Decimal(str(stock_info.get('current_price', 0)))
+                        previous_close = Decimal(str(stock_info.get('previous_close', 0)))
+                except Exception:
+                    pass
+            
+            # 현재가가 없으면 평균가 사용
+            if current_price is None:
+                current_price = portfolio.average_price or Decimal('0')
+            if previous_close is None:
+                previous_close = current_price  # 전일 종가 정보가 없으면 현재가로 대체
+            
+            # 현재 가치 계산
+            position_value = current_price * portfolio.current_quantity
+            
+            # 일간 손익 계산 (현재가 - 전일종가) * 수량
+            daily_change = (current_price - previous_close) * portfolio.current_quantity
+            
+            # 해외 주식인 경우 캐싱된 환율 적용
+            if portfolio.base_currency and portfolio.base_currency != 'KRW':
+                exchange_rate = exchange_rates.get(portfolio.base_currency, Decimal('1'))
+                position_value = position_value * exchange_rate
+                daily_change = daily_change * exchange_rate
+            
+            total_current_value_krw += position_value
+            daily_profit_loss_krw += daily_change
+        
+        # 총 수익금 및 수익률 계산
+        total_profit_loss = total_current_value_krw - total_invested_krw
+        total_profit_loss_rate = Decimal('0')
+        if total_invested_krw > 0:
+            total_profit_loss_rate = (total_profit_loss / total_invested_krw) * 100
+        
+        # 일간 손익률 계산
+        daily_profit_loss_rate = Decimal('0')
+        if total_invested_krw > 0:
+            daily_profit_loss_rate = (daily_profit_loss_krw / total_invested_krw) * 100
+        
+        return {
+            'total_invested_amount': float(total_invested_krw),
+            'total_current_value': float(total_current_value_krw),
+            'total_profit_loss': float(total_profit_loss),
+            'total_profit_loss_rate': float(total_profit_loss_rate),
+            'daily_profit_loss': float(daily_profit_loss_krw),
+            'daily_profit_loss_rate': float(daily_profit_loss_rate)
+        }
