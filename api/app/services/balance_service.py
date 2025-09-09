@@ -10,19 +10,21 @@ from app.db.models.transaction import Transaction, TransactionType
 from sqlalchemy import func
 from app.db.models.virtual_balance import VirtualBalance, VirtualBalanceHistory
 from app.services.payment_service import PaymentService
+from app.services.toss_proxy_service import TossProxyService
 from app.api.v1.schemas.virtual_balance_schema import BalanceUpdateRequest
 
 
 class BalanceService:
     """가상 잔고 관리 서비스"""
     
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, toss_proxy_service: Optional[TossProxyService] = None):
         self.db = db
         self.virtual_balance_repo = VirtualBalanceRepository(db)
         self.payment_service = PaymentService(db)
         self.portfolio_repo = PortfolioRepository(db)
+        self.toss_proxy_service = toss_proxy_service
     
-    def get_virtual_balance(self, user_id: str) -> Optional[VirtualBalance]:
+    def get_virtual_balance(self, user_id: str) -> Optional[Dict[str, Any]]:
         """
         사용자의 가상 거래 잔고를 조회합니다.
         
@@ -30,9 +32,41 @@ class BalanceService:
             user_id: 사용자 ID
             
         Returns:
-            가상 잔고 정보
+            가상 잔고 정보 (추가 계산값 포함)
         """
-        return self.payment_service.get_virtual_balance(user_id)
+        virtual_balance = self.payment_service.get_virtual_balance(user_id)
+        if not virtual_balance:
+            return None
+            
+        # 포트폴리오 현재 가치 계산
+        portfolio_value = self._calculate_portfolio_value(user_id)
+        
+        # 총 자산 = 주문가능금액(available_cash) + 현재 주식 가치
+        total_assets = virtual_balance.available_cash + portfolio_value
+        
+        # 손익률 계산: (현재가치 - 투자금액) / 투자금액 * 100
+        profit_loss_rate = Decimal('0')
+        if virtual_balance.invested_amount and virtual_balance.invested_amount > 0:
+            profit_loss_rate = ((portfolio_value - virtual_balance.invested_amount) / virtual_balance.invested_amount) * 100
+        
+        # VirtualBalance 객체를 딕셔너리로 변환하고 추가 필드 포함
+        result = {
+            'id': virtual_balance.id,
+            'user_id': virtual_balance.user_id,
+            'cash_balance': virtual_balance.cash_balance,
+            'available_cash': virtual_balance.available_cash,
+            'invested_amount': virtual_balance.invested_amount,
+            'last_trade_date': virtual_balance.last_trade_date,
+            'last_updated_at': virtual_balance.last_updated_at,
+            'created_at': virtual_balance.created_at,
+            'updated_at': virtual_balance.updated_at,
+            # 추가 필드
+            'total_assets': total_assets,
+            'portfolio_value': portfolio_value,
+            'profit_loss_rate': profit_loss_rate
+        }
+        
+        return result
     
     def initialize_virtual_balance(
         self, 
@@ -256,3 +290,56 @@ class BalanceService:
             'last_trade_date': virtual_balance.last_trade_date.isoformat() if virtual_balance.last_trade_date else None,
             'last_updated_at': virtual_balance.last_updated_at.isoformat() if virtual_balance.last_updated_at else None
         }
+    
+    def _calculate_portfolio_value(self, user_id: str) -> Decimal:
+        """
+        포트폴리오의 현재 가치를 계산합니다.
+        해외 주식의 경우 현재 환율을 적용합니다.
+        
+        Args:
+            user_id: 사용자 ID
+            
+        Returns:
+            포트폴리오 현재 가치 (KRW)
+        """
+        portfolios = self.portfolio_repo.get_by_user_id(user_id, only_active=True, include_orders=False)
+        total_value = Decimal('0')
+        
+        for portfolio in portfolios:
+            if portfolio.current_quantity <= 0:
+                continue
+                
+            # 현재가 가져오기
+            current_price = None
+            if self.toss_proxy_service:
+                try:
+                    # Toss API에서 실시간 가격 조회
+                    stock_info = self.toss_proxy_service.get_stock_price(portfolio.product_code)
+                    if stock_info and 'current_price' in stock_info:
+                        current_price = Decimal(str(stock_info['current_price']))
+                except Exception:
+                    pass
+            
+            # 현재가가 없으면 평균가 사용
+            if current_price is None:
+                current_price = portfolio.average_price or Decimal('0')
+            
+            # 현재 가치 계산
+            position_value = current_price * portfolio.current_quantity
+            
+            # 해외 주식인 경우 환율 적용
+            if portfolio.base_currency and portfolio.base_currency != 'KRW':
+                if self.toss_proxy_service:
+                    try:
+                        exchange_rate = self.toss_proxy_service.get_exchange_rate(portfolio.base_currency)
+                        position_value = position_value * exchange_rate
+                    except Exception:
+                        # 환율 조회 실패시 저장된 평균 환율 사용
+                        if portfolio.average_exchange_rate:
+                            position_value = position_value * portfolio.average_exchange_rate
+                elif portfolio.average_exchange_rate:
+                    position_value = position_value * portfolio.average_exchange_rate
+            
+            total_value += position_value
+            
+        return total_value

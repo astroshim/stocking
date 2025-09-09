@@ -484,6 +484,9 @@ class OrderService:
             virtual_balance.cash_balance -= actual_for_executed_krw
             # 매수 시 투자금액 증가 (체결금액만큼)
             virtual_balance.invested_amount = (virtual_balance.invested_amount or Decimal('0')) + executed_amount_krw
+            # 마지막 거래일 업데이트
+            virtual_balance.last_trade_date = datetime.now()
+            virtual_balance.last_updated_at = datetime.now()
             # 이력 기록 (BUY)
             try:
                 self.virtual_balance_repository._add_balance_history(
@@ -536,6 +539,9 @@ class OrderService:
                 
                 virtual_balance.invested_amount = max(Decimal('0'), 
                     (virtual_balance.invested_amount or Decimal('0')) - sold_cost_krw)
+            # 마지막 거래일 업데이트
+            virtual_balance.last_trade_date = datetime.now()
+            virtual_balance.last_updated_at = datetime.now()
             # 이력 기록 (SELL)
             try:
                 self.virtual_balance_repository._add_balance_history(

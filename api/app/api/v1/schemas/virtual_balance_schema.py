@@ -25,6 +25,10 @@ class VirtualBalanceResponse(InitVarModel):
     last_updated_at: datetime
     created_at: datetime
     updated_at: datetime
+    # 추가 필드
+    total_assets: Optional[Decimal] = Field(None, description="총 자산 (주문가능금액 + 현재주식가치)")
+    portfolio_value: Optional[Decimal] = Field(None, description="현재 주식 가치")
+    profit_loss_rate: Optional[Decimal] = Field(None, description="손익률 (%)")
 
 
 class VirtualBalanceHistoryResponse(InitVarModel):

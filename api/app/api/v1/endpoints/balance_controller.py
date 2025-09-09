@@ -17,16 +17,27 @@ async def get_virtual_balance(
     current_user_id: str = Depends(get_current_user),
     balance_service: BalanceService = Depends(get_balance_service)
 ):
-    """사용자의 가상 거래 잔고를 조회합니다."""
+    """
+    사용자의 가상 거래 잔고를 조회합니다.
+    
+    포함되는 정보:
+    - 총 자산 (주문가능금액 + 현재주식가치)
+    - 주문가능금액
+    - 투자중인금액
+    - 손익률 (%)
+    - 현재 주식 가치 (포트폴리오)
+    """
     try:
-        virtual_balance = balance_service.get_virtual_balance(current_user_id)
+        virtual_balance_data = balance_service.get_virtual_balance(current_user_id)
         
         # 가상잔고가 없으면 새로 생성 (지연 생성)
-        if not virtual_balance:
+        if not virtual_balance_data:
             virtual_balance = balance_service.initialize_virtual_balance(current_user_id)
+            # 새로 생성한 경우 다시 조회하여 추가 필드 포함
+            virtual_balance_data = balance_service.get_virtual_balance(current_user_id)
         
         # VirtualBalanceResponse로 변환
-        balance_data = VirtualBalanceResponse.model_validate(virtual_balance)
+        balance_data = VirtualBalanceResponse.model_validate(virtual_balance_data)
         
         return create_response(balance_data.model_dump(), message="가상 잔고 조회 성공")
     except Exception as e:
