@@ -138,132 +138,6 @@ class PortfolioService:
             has_next=offset + size < total_items
         )
 
-    def get_portfolio_summary(self, user_id: str) -> Dict[str, Any]:
-        """포트폴리오 요약 정보 조회"""
-        return self.portfolio_repo.get_portfolio_summary(user_id)
-
-    # def get_portfolio_analysis(self, user_id: str) -> Dict[str, Any]:
-    #     exchange_rate = self.toss_proxy_service.get_exchange_rate('USD')
-    #     print(f"-----------> exchange_rate: {exchange_rate}")
-
-    #     """포트폴리오 분석 정보 조회 (환율 반영 라이브 지표 포함)"""
-    #     sector_allocation = self.portfolio_repo.get_sector_allocation(user_id)
-    #     top_holdings = self.portfolio_repo.get_top_holdings(user_id)
-        
-    #     # 성과 지표 계산
-    #     summary = self.portfolio_repo.get_portfolio_summary(user_id)
-    #     performance_metrics = {
-    #         'total_return': float(summary['total_profit_loss']),
-    #         'total_return_rate': float(summary['total_profit_loss_rate']),
-    #         'total_invested': float(summary['total_invested_amount']),
-    #         'current_value': float(summary['total_current_value'])
-    #     }
-        
-    #     # 리스크 지표 (간단한 계산)
-    #     total_current_value_float = float(summary['total_current_value']) if summary['total_current_value'] is not None else 0.0
-    #     max_holding_value = max([holding.get('current_value', 0.0) for holding in top_holdings], default=0.0)
-    #     risk_metrics = {
-    #         'diversification_score': len(sector_allocation),  # 섹터 다양성
-    #         'concentration_risk': (
-    #             (max_holding_value / total_current_value_float * 100.0)
-    #             if total_current_value_float > 0.0 else 0.0
-    #         )
-    #     }
-        
-    #     # # Toss 환율 반영: 섹터별 라이브 지표 보강
-    #     # try:
-    #     #     portfolios = self.portfolio_repo.get_by_user_id(user_id, only_active=True, include_orders=False)
-    #     #     currency_to_rate: Dict[str, Decimal] = {}
-    #     #     if self.toss_proxy_service:
-    #     #         unique_currencies = set([str(getattr(p, 'base_currency', 'KRW') or 'KRW') for p in portfolios])
-    #     #         for cur in unique_currencies:
-    #     #             try:
-    #     #                 currency_to_rate[cur] = self.toss_proxy_service.get_exchange_rate(cur, 'KRW')
-    #     #             except Exception:
-    #     #                 currency_to_rate[cur] = Decimal('1.0') if cur == 'KRW' else Decimal('0')
-    #     #     else:
-    #     #         currency_to_rate['KRW'] = Decimal('1.0')
-
-    #     #     sector_live: Dict[str, Dict[str, Any]] = {}
-    #     #     total_current_value_live = Decimal('0')
-    #     #     total_unrealized_live = Decimal('0')
-
-    #     #     for p in portfolios:
-    #     #         code = str(getattr(p, 'industry_code', None) or '기타')
-    #     #         display = str(getattr(p, 'industry_display', None) or '기타')
-    #     #         base_currency = str(getattr(p, 'base_currency', 'KRW') or 'KRW')
-    #     #         rate = currency_to_rate.get(base_currency, Decimal('1.0')) or Decimal('1.0')
-
-    #     #         quantity = Decimal(str(p.current_quantity or 0))
-    #     #         avg_price_local = Decimal(str(p.average_price or 0))
-
-    #     #         current_value_live = quantity * avg_price_local * rate
-
-    #     #         if getattr(p, 'krw_total_buy_amount', None):
-    #     #             invested_krw = Decimal(str(p.krw_total_buy_amount))
-    #     #         elif getattr(p, 'krw_average_price', None) is not None:
-    #     #             invested_krw = quantity * Decimal(str(p.krw_average_price))
-    #     #         else:
-    #     #             invested_krw = quantity * avg_price_local * rate
-
-    #     #         unrealized_live = current_value_live - invested_krw
-
-    #     #         if code not in sector_live:
-    #     #             sector_live[code] = {
-    #     #                 'industry_code': code,
-    #     #                 'industry_display': display,
-    #     #                 'value_live': Decimal('0'),
-    #     #                 'invested_live': Decimal('0'),
-    #     #                 'unrealized_live': Decimal('0'),
-    #     #                 'count': 0
-    #     #             }
-    #     #         sector_live[code]['value_live'] += current_value_live
-    #     #         sector_live[code]['invested_live'] += invested_krw
-    #     #         sector_live[code]['unrealized_live'] += unrealized_live
-    #     #         sector_live[code]['count'] += 1
-
-    #     #         total_current_value_live += current_value_live
-    #     #         total_unrealized_live += unrealized_live
-
-    #     #     enriched = []
-    #     #     for code, s in sector_live.items():
-    #     #         percentage_live = float((s['value_live'] / total_current_value_live * 100) if total_current_value_live > 0 else 0)
-    #     #         profit_loss_rate_live = float((s['unrealized_live'] / s['invested_live'] * 100) if s['invested_live'] > 0 else 0)
-    #     #         profit_loss_pct_of_total_live = float((s['unrealized_live'] / total_unrealized_live * 100) if total_unrealized_live != 0 else 0)
-    #     #         enriched.append({
-    #     #             'industry_code': s['industry_code'],
-    #     #             'industry_display': s['industry_display'],
-    #     #             'value_live': float(s['value_live']),
-    #     #             'count': s['count'],
-    #     #             'percentage_live': percentage_live,
-    #     #             'profit_loss_live': float(s['unrealized_live']),
-    #     #             'profit_loss_rate_live': profit_loss_rate_live,
-    #     #             'profit_loss_percentage_of_total_live': profit_loss_pct_of_total_live
-    #     #         })
-
-    #     #     sector_allocation_map = { (d.get('industry_code') or d.get('sector') or '기타'): d for d in sector_allocation }
-    #     #     for e in enriched:
-    #     #         key = e['industry_code']
-    #     #         base = sector_allocation_map.get(key, {'industry_code': key, 'industry_display': e['industry_display']})
-    #     #         base.update({
-    #     #             'value_live': e['value_live'],
-    #     #             'percentage_live': e['percentage_live'],
-    #     #             'profit_loss_live': e['profit_loss_live'],
-    #     #             'profit_loss_rate_live': e['profit_loss_rate_live'],
-    #     #             'profit_loss_percentage_of_total_live': e['profit_loss_percentage_of_total_live']
-    #     #         })
-    #     #         sector_allocation_map[key] = base
-    #     #     sector_allocation = list(sector_allocation_map.values())
-    #     # except Exception:
-    #     #     pass
-
-    #     return {
-    #         'sector_allocation': sector_allocation,
-    #         'top_holdings': top_holdings,
-    #         'performance_metrics': performance_metrics,
-    #         'risk_metrics': risk_metrics
-    #     }
-
     def get_portfolio_by_stock(self, user_id: str, product_code: str) -> Optional[Dict[str, Any]]:
         """특정 종목 포트폴리오 조회 (product_code 기반)"""
         portfolio = self.portfolio_repo.get_by_user_and_stock(user_id, product_code)
@@ -361,28 +235,16 @@ class PortfolioService:
             from datetime import date
             
             if portfolio.first_buy_date and portfolio.first_buy_date.date() == date.today():
-                print(f"-----------> 오늘 처음 매수한 종목: {portfolio.product_code}")
                 # 오늘 처음 매수한 종목은 매수가 기준으로 일간 손익 계산
                 # 현재 평가금액(현재 환율) - 투자금액(매수 시점 환율)
                 current_value_krw = current_price * portfolio.current_quantity * exchange_rate
                 daily_change = current_value_krw - position_cost_krw
-                print(f"  - 현재가: {current_price}, 평균매수가: {portfolio.average_price}, 수량: {portfolio.current_quantity}")
-                print(f"  - 현재환율: {exchange_rate}, 매수시점 원화가: {portfolio.krw_average_price if portfolio.krw_average_price else portfolio.average_price}")
-                print(f"  - 일간손익: {daily_change}")
             else:
-                print(f"-----------> 기존 보유 종목: {portfolio.product_code}")
                 # 기존 보유 종목은 전일 종가 기준으로 일간 손익 계산
                 daily_change = (current_price - previous_close) * portfolio.current_quantity * exchange_rate
-                print(f"  - 현재가: {current_price}, 전일종가: {previous_close}, 수량: {portfolio.current_quantity}")
-                print(f"  - 환율: {exchange_rate}, 일간손익: {daily_change}")
             
             # 현재 가치에도 환율 적용
             position_value = position_value * exchange_rate
-            
-            # 각 종목별 손익 계산
-            position_profit_loss = position_value - position_cost_krw
-            print(f"  - 현재평가(KRW): {position_value}, 투자금액(KRW): {position_cost_krw}")
-            print(f"  - 종목 총손익: {position_profit_loss}, 종목 일간손익: {daily_change}")
             
             total_current_value_krw += position_value
             daily_profit_loss_krw += daily_change
@@ -393,13 +255,6 @@ class PortfolioService:
         if total_invested_krw > 0:
             total_profit_loss_rate = (total_profit_loss / total_invested_krw) * 100
         
-        print(f"\n========== 포트폴리오 대시보드 총계 ==========")
-        print(f"총 투자금액(KRW): {total_invested_krw}")
-        print(f"총 평가금액(KRW): {total_current_value_krw}")
-        print(f"총 손익(KRW): {total_profit_loss}")
-        print(f"일간 손익(KRW): {daily_profit_loss_krw}")
-        print(f"차이: {total_profit_loss - daily_profit_loss_krw}")
-        print(f"==========================================\n")
         
         # 일간 손익률 계산
         # - 당일 구매 종목이 포함된 경우: (일간 손익금 / 총 투자금액) × 100
@@ -524,6 +379,19 @@ class PortfolioService:
             if total_invested_krw > 0:
                 weight_percentage = (invested_amount / total_invested_krw) * 100
             
+            # 현재가 정보 가져오기
+            current_price_original = stock_prices.get(portfolio.product_code)
+            current_price_krw = None
+            currency = portfolio.base_currency or 'KRW'
+            
+            if current_price_original is not None:
+                # KRW 환산 현재가 계산
+                if currency == 'KRW':
+                    current_price_krw = current_price_original
+                else:
+                    exchange_rate = exchange_rates.get(currency, Decimal('1'))
+                    current_price_krw = current_price_original * exchange_rate
+            
             items.append({
                 'product_code': portfolio.product_code,
                 'product_name': portfolio.product_name or portfolio.product_code,
@@ -535,7 +403,10 @@ class PortfolioService:
                 'profit_loss_rate': float(profit_loss_rate),
                 'weight_percentage': float(weight_percentage),
                 'quantity': float(portfolio.current_quantity),
-                'average_price': float(portfolio.krw_average_price or portfolio.average_price or 0)
+                'average_price': float(portfolio.krw_average_price or portfolio.average_price or 0),
+                'current_price_krw': float(current_price_krw) if current_price_krw else None,
+                'current_price_original': float(current_price_original) if current_price_original else None,
+                'currency': currency
             })
         
         # 투자 비중 기준으로 정렬 (내림차순)

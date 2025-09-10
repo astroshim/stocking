@@ -133,6 +133,9 @@ class InvestmentWeightItem(BaseModel):
     weight_percentage: Decimal = Field(..., description="투자 비중 (%)")
     quantity: Decimal = Field(..., description="보유 수량")
     average_price: Decimal = Field(..., description="평균 단가")
+    current_price_krw: Optional[Decimal] = Field(None, description="현재가 (KRW 환산)")
+    current_price_original: Optional[Decimal] = Field(None, description="현재가 (원 통화)")
+    currency: Optional[str] = Field(None, description="통화")
 
 
 class SectorWeightItem(BaseModel):
