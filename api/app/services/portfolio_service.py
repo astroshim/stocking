@@ -2,6 +2,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from decimal import Decimal
 from datetime import datetime, date
+import logging
 
 from app.db.repositories.portfolio_repository import PortfolioRepository
 from app.db.repositories.transaction_repository import TransactionRepository
@@ -20,6 +21,80 @@ class PortfolioService:
         self.transaction_repo = TransactionRepository(db)
         self.toss_proxy_service = toss_proxy_service
         # watchlist 관련 로직은 WatchListService로 이동
+    
+    def _cache_exchange_rates(self, portfolios: List[Portfolio]) -> Dict[str, Decimal]:
+        """포트폴리오 목록에서 필요한 환율 정보를 캐싱합니다."""
+        exchange_rates = {}
+        for portfolio in portfolios:
+            if portfolio.base_currency and portfolio.base_currency != 'KRW':
+                if portfolio.base_currency not in exchange_rates:
+                    if self.toss_proxy_service:
+                        try:
+                            exchange_rates[portfolio.base_currency] = self.toss_proxy_service.get_exchange_rate(portfolio.base_currency)
+                        except Exception:
+                            if portfolio.average_exchange_rate:
+                                exchange_rates[portfolio.base_currency] = portfolio.average_exchange_rate
+                            else:
+                                exchange_rates[portfolio.base_currency] = Decimal('1')
+                    elif portfolio.average_exchange_rate:
+                        exchange_rates[portfolio.base_currency] = portfolio.average_exchange_rate
+                    else:
+                        exchange_rates[portfolio.base_currency] = Decimal('1')
+        return exchange_rates
+    
+    def _cache_stock_prices(self, portfolios: List[Portfolio]) -> Dict[str, Optional[Decimal]]:
+        """포트폴리오 목록에서 필요한 주가 정보를 캐싱합니다."""
+        if not self.toss_proxy_service:
+            return {p.product_code: None for p in portfolios}
+        
+        # 중복 제거된 종목 코드 리스트
+        unique_codes = list(set(p.product_code for p in portfolios if p.product_code))
+        
+        if not unique_codes:
+            return {}
+        
+        try:
+            # 배치 API 호출로 모든 종목 가격을 한 번에 조회
+            price_data_map = self.toss_proxy_service.get_stock_prices_batch(unique_codes)
+            
+            # current_price만 추출
+            stock_prices = {}
+            for code, price_data in price_data_map.items():
+                if price_data and 'current_price' in price_data:
+                    stock_prices[code] = price_data['current_price']
+                else:
+                    stock_prices[code] = None
+            
+            return stock_prices
+            
+        except Exception as e:
+            logging.error(f"Error caching stock prices: {str(e)}")
+            return {code: None for code in unique_codes}
+    
+    def _calculate_krw_amount(self, amount: Decimal, currency: Optional[str], exchange_rates: Dict[str, Decimal]) -> Decimal:
+        """외화 금액을 KRW로 환산합니다."""
+        if not currency or currency == 'KRW':
+            return amount
+        exchange_rate = exchange_rates.get(currency, Decimal('1'))
+        return amount * exchange_rate
+    
+    def _calculate_portfolio_cost_krw(self, portfolio: Portfolio, exchange_rates: Dict[str, Decimal]) -> Decimal:
+        """포트폴리오의 원가를 KRW로 계산합니다."""
+        if portfolio.krw_average_price:
+            return portfolio.krw_average_price * portfolio.current_quantity
+        elif portfolio.average_price:
+            cost = portfolio.average_price * portfolio.current_quantity
+            return self._calculate_krw_amount(cost, portfolio.base_currency, exchange_rates)
+        return Decimal('0')
+    
+    def _calculate_portfolio_value_krw(self, portfolio: Portfolio, stock_prices: Dict[str, Optional[Decimal]], exchange_rates: Dict[str, Decimal]) -> Decimal:
+        """포트폴리오의 현재 가치를 KRW로 계산합니다."""
+        current_price = stock_prices.get(portfolio.product_code)
+        if current_price is None:
+            current_price = portfolio.average_price or Decimal('0')
+        
+        value = current_price * portfolio.current_quantity
+        return self._calculate_krw_amount(value, portfolio.base_currency, exchange_rates)
 
     def get_user_portfolio(
         self, 
@@ -229,24 +304,8 @@ class PortfolioService:
                 'daily_profit_loss_rate': 0
             }
         
-        # 환율 정보를 미리 캐싱 (중복 API 호출 방지)
-        exchange_rates = {}
-        for portfolio in portfolios:
-            if portfolio.base_currency and portfolio.base_currency != 'KRW':
-                if portfolio.base_currency not in exchange_rates:
-                    if self.toss_proxy_service:
-                        try:
-                            exchange_rates[portfolio.base_currency] = self.toss_proxy_service.get_exchange_rate(portfolio.base_currency)
-                        except Exception:
-                            # 환율 조회 실패시 저장된 평균 환율 사용
-                            if portfolio.average_exchange_rate:
-                                exchange_rates[portfolio.base_currency] = portfolio.average_exchange_rate
-                            else:
-                                exchange_rates[portfolio.base_currency] = Decimal('1')
-                    elif portfolio.average_exchange_rate:
-                        exchange_rates[portfolio.base_currency] = portfolio.average_exchange_rate
-                    else:
-                        exchange_rates[portfolio.base_currency] = Decimal('1')
+        # 환율 및 주가 정보 캐싱
+        exchange_rates = self._cache_exchange_rates(portfolios)
         
         total_invested_krw = Decimal('0')  # 원금 (KRW)
         total_current_value_krw = Decimal('0')  # 현재 평가금액 (KRW)
@@ -257,17 +316,7 @@ class PortfolioService:
                 continue
             
             # 원금 계산 (KRW 기준)
-            if portfolio.krw_average_price:
-                position_cost_krw = portfolio.krw_average_price * portfolio.current_quantity
-            elif portfolio.average_price:
-                position_cost_krw = portfolio.average_price * portfolio.current_quantity
-                # 해외 주식인 경우 캐싱된 환율 적용
-                if portfolio.base_currency and portfolio.base_currency != 'KRW':
-                    exchange_rate = exchange_rates.get(portfolio.base_currency, Decimal('1'))
-                    position_cost_krw = position_cost_krw * exchange_rate
-            else:
-                position_cost_krw = Decimal('0')
-            
+            position_cost_krw = self._calculate_portfolio_cost_krw(portfolio, exchange_rates)
             total_invested_krw += position_cost_krw
             
             # 현재가 및 전일 종가 가져오기
@@ -323,4 +372,196 @@ class PortfolioService:
             'total_profit_loss_rate': float(total_profit_loss_rate),
             'daily_profit_loss': float(daily_profit_loss_krw),
             'daily_profit_loss_rate': float(daily_profit_loss_rate)
+        }
+    
+    def get_investment_weights(self, user_id: str, filter_type: str = 'total', sector: Optional[str] = None) -> Dict[str, Any]:
+        """
+        투자 비중 정보를 조회합니다.
+        
+        Args:
+            user_id: 사용자 ID
+            filter_type: 필터 타입 (total/domestic/foreign/sector/sector_group)
+            sector: 섹터명 (filter_type이 'sector'일 때 필수)
+            
+        Returns:
+            투자 비중 정보
+        """
+        portfolios = self.portfolio_repo.get_by_user_id(user_id, only_active=True, include_orders=False)
+        
+        if not portfolios:
+            return {
+                'filter_type': filter_type,
+                'sector_name': sector,
+                'total_invested_amount': 0,
+                'total_current_value': 0,
+                'total_profit_loss': 0,
+                'total_profit_loss_rate': 0,
+                'items': [],
+                'sector_items': None
+            }
+        
+        # 환율 및 주가 정보 캐싱
+        exchange_rates = self._cache_exchange_rates(portfolios)
+        stock_prices = self._cache_stock_prices(portfolios)
+        
+        # 필터링된 포트폴리오 선택
+        filtered_portfolios = []
+        for portfolio in portfolios:
+            if portfolio.current_quantity <= 0:
+                continue
+                
+            # 필터 적용
+            if filter_type == 'domestic':
+                # 국내 주식: KRW 또는 KOSPI/KOSDAQ 시장
+                if portfolio.base_currency == 'KRW' or portfolio.market in ['KOSPI', 'KOSDAQ', 'KONEX']:
+                    filtered_portfolios.append(portfolio)
+            elif filter_type == 'foreign':
+                # 해외 주식: KRW가 아닌 통화
+                if portfolio.base_currency and portfolio.base_currency != 'KRW' and portfolio.market not in ['KOSPI', 'KOSDAQ', 'KONEX']:
+                    filtered_portfolios.append(portfolio)
+            elif filter_type == 'sector':
+                # 섹터별 필터링
+                if sector:
+                    portfolio_sector = portfolio.industry_display or portfolio.industry_code or '기타'
+                    if portfolio_sector == sector:
+                        filtered_portfolios.append(portfolio)
+            else:  # total
+                filtered_portfolios.append(portfolio)
+        
+        # 총 투자금액 및 평가금액 계산 (KRW 기준)
+        total_invested_krw = Decimal('0')
+        total_current_value_krw = Decimal('0')
+        portfolio_investments = []
+        
+        for portfolio in filtered_portfolios:
+            # 투자금액 계산 (KRW 기준)
+            invested_krw = self._calculate_portfolio_cost_krw(portfolio, exchange_rates)
+            
+            # 현재 평가금액 계산 (KRW 기준)
+            current_value_krw = self._calculate_portfolio_value_krw(portfolio, stock_prices, exchange_rates)
+            
+            portfolio_investments.append({
+                'portfolio': portfolio,
+                'invested_amount': invested_krw,
+                'current_value': current_value_krw
+            })
+            total_invested_krw += invested_krw
+            total_current_value_krw += current_value_krw
+        
+        # 투자 비중 계산 및 결과 생성
+        items = []
+        for item in portfolio_investments:
+            portfolio = item['portfolio']
+            invested_amount = item['invested_amount']
+            current_value = item['current_value']
+            
+            # 평가 손익 및 수익률 계산
+            profit_loss = current_value - invested_amount
+            profit_loss_rate = Decimal('0')
+            if invested_amount > 0:
+                profit_loss_rate = (profit_loss / invested_amount) * 100
+            
+            # 투자 비중 계산
+            weight_percentage = Decimal('0')
+            if total_invested_krw > 0:
+                weight_percentage = (invested_amount / total_invested_krw) * 100
+            
+            items.append({
+                'product_code': portfolio.product_code,
+                'product_name': portfolio.product_name or portfolio.product_code,
+                'market': portfolio.market,
+                'sector': portfolio.industry_display or portfolio.industry_code or '기타',
+                'invested_amount': float(invested_amount),
+                'current_value': float(current_value),
+                'profit_loss': float(profit_loss),
+                'profit_loss_rate': float(profit_loss_rate),
+                'weight_percentage': float(weight_percentage),
+                'quantity': float(portfolio.current_quantity),
+                'average_price': float(portfolio.krw_average_price or portfolio.average_price or 0)
+            })
+        
+        # 투자 비중 기준으로 정렬 (내림차순)
+        items.sort(key=lambda x: x['weight_percentage'], reverse=True)
+        
+        # 섹터 그룹 모드일 경우 섹터별로 그룹화
+        if filter_type == 'sector_group':
+            sector_groups = {}
+            
+            for item in items:
+                sector_name = item['sector']
+                if sector_name not in sector_groups:
+                    sector_groups[sector_name] = {
+                        'sector': sector_name,
+                        'invested_amount': Decimal('0'),
+                        'current_value': Decimal('0'),
+                        'stocks': []
+                    }
+                
+                sector_groups[sector_name]['invested_amount'] += Decimal(str(item['invested_amount']))
+                sector_groups[sector_name]['current_value'] += Decimal(str(item['current_value']))
+                sector_groups[sector_name]['stocks'].append(item)
+            
+            # 섹터별 투자 비중 계산 및 정렬
+            sector_items = []
+            for sector_name, group_data in sector_groups.items():
+                sector_invested = group_data['invested_amount']
+                sector_current = group_data['current_value']
+                sector_profit_loss = sector_current - sector_invested
+                
+                # 섹터별 수익률 계산
+                sector_profit_loss_rate = Decimal('0')
+                if sector_invested > 0:
+                    sector_profit_loss_rate = (sector_profit_loss / sector_invested) * 100
+                
+                # 섹터별 투자 비중 계산
+                weight_percentage = Decimal('0')
+                if total_invested_krw > 0:
+                    weight_percentage = (sector_invested / total_invested_krw) * 100
+                
+                sector_items.append({
+                    'sector': sector_name,
+                    'invested_amount': float(sector_invested),
+                    'current_value': float(sector_current),
+                    'profit_loss': float(sector_profit_loss),
+                    'profit_loss_rate': float(sector_profit_loss_rate),
+                    'weight_percentage': float(weight_percentage),
+                    'stock_count': len(group_data['stocks']),
+                    'stocks': group_data['stocks']
+                })
+            
+            # 섹터별 투자 비중 기준으로 정렬
+            sector_items.sort(key=lambda x: x['weight_percentage'], reverse=True)
+            
+            # 총 손익 계산
+            total_profit_loss = total_current_value_krw - total_invested_krw
+            total_profit_loss_rate = Decimal('0')
+            if total_invested_krw > 0:
+                total_profit_loss_rate = (total_profit_loss / total_invested_krw) * 100
+            
+            return {
+                'filter_type': filter_type,
+                'sector_name': None,
+                'total_invested_amount': float(total_invested_krw),
+                'total_current_value': float(total_current_value_krw),
+                'total_profit_loss': float(total_profit_loss),
+                'total_profit_loss_rate': float(total_profit_loss_rate),
+                'items': None,
+                'sector_items': sector_items
+            }
+        
+        # 총 손익 계산
+        total_profit_loss = total_current_value_krw - total_invested_krw
+        total_profit_loss_rate = Decimal('0')
+        if total_invested_krw > 0:
+            total_profit_loss_rate = (total_profit_loss / total_invested_krw) * 100
+        
+        return {
+            'filter_type': filter_type,
+            'sector_name': sector,
+            'total_invested_amount': float(total_invested_krw),
+            'total_current_value': float(total_current_value_krw),
+            'total_profit_loss': float(total_profit_loss),
+            'total_profit_loss_rate': float(total_profit_loss_rate),
+            'items': items,
+            'sector_items': None
         }

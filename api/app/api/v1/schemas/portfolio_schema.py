@@ -118,3 +118,42 @@ class PortfolioDashboardResponse(BaseModel):
     total_profit_loss_rate: Decimal = Field(..., description="총 수익률 (%)")
     daily_profit_loss: Decimal = Field(..., description="일간 손익금")
     daily_profit_loss_rate: Decimal = Field(..., description="일간 손익률 (%)")
+
+
+class InvestmentWeightItem(BaseModel):
+    """투자 비중 항목"""
+    product_code: str = Field(..., description="종목 코드")
+    product_name: str = Field(..., description="종목명")
+    market: Optional[str] = Field(None, description="시장 구분")
+    sector: Optional[str] = Field(None, description="섹터/업종")
+    invested_amount: Decimal = Field(..., description="투자 금액 (KRW)")
+    current_value: Decimal = Field(..., description="현재 평가금액 (KRW)")
+    profit_loss: Decimal = Field(..., description="평가 손익 (KRW)")
+    profit_loss_rate: Decimal = Field(..., description="수익률 (%)")
+    weight_percentage: Decimal = Field(..., description="투자 비중 (%)")
+    quantity: Decimal = Field(..., description="보유 수량")
+    average_price: Decimal = Field(..., description="평균 단가")
+
+
+class SectorWeightItem(BaseModel):
+    """섹터별 투자 비중 항목"""
+    sector: str = Field(..., description="섹터/업종")
+    invested_amount: Decimal = Field(..., description="투자 금액 (KRW)")
+    current_value: Decimal = Field(..., description="현재 평가금액 (KRW)")
+    profit_loss: Decimal = Field(..., description="평가 손익 (KRW)")
+    profit_loss_rate: Decimal = Field(..., description="수익률 (%)")
+    weight_percentage: Decimal = Field(..., description="투자 비중 (%)")
+    stock_count: int = Field(..., description="보유 종목 수")
+    stocks: List[InvestmentWeightItem] = Field(..., description="섹터 내 종목 목록")
+
+
+class InvestmentWeightResponse(BaseModel):
+    """투자 비중 응답"""
+    filter_type: str = Field(..., description="필터 타입 (total/domestic/foreign/sector/sector_group)")
+    sector_name: Optional[str] = Field(None, description="섹터명 (섹터별 조회시)")
+    total_invested_amount: Decimal = Field(..., description="총 투자금액 (KRW)")
+    total_current_value: Decimal = Field(..., description="총 평가금액 (KRW)")
+    total_profit_loss: Decimal = Field(..., description="총 평가손익 (KRW)")
+    total_profit_loss_rate: Decimal = Field(..., description="총 수익률 (%)")
+    items: Optional[List[InvestmentWeightItem]] = Field(None, description="종목별 투자 비중")
+    sector_items: Optional[List[SectorWeightItem]] = Field(None, description="섹터별 투자 비중")

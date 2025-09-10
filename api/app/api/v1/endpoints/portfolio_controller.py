@@ -6,7 +6,7 @@ from app.config.di import get_portfolio_service
 from app.services.portfolio_service import PortfolioService
 from app.api.v1.schemas.portfolio_schema import (
     PortfolioResponse, PortfolioWithStockResponse, PortfolioListResponse, PortfolioSummaryResponse,
-    PortfolioAnalysisResponse, PortfolioDashboardResponse
+    PortfolioAnalysisResponse, PortfolioDashboardResponse, InvestmentWeightResponse
 )
 from app.utils.response_helper import create_response
 from app.utils.simple_paging import SimplePage
@@ -146,6 +146,71 @@ async def get_portfolio_dashboard(
         return create_response(dashboard.model_dump(), message="포트폴리오 대시보드 조회 성공")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"포트폴리오 대시보드 조회 실패: {str(e)}")
+
+
+@router.get("/investment-weights", response_model=InvestmentWeightResponse, summary="투자 비중 조회")
+async def get_investment_weights(
+    filter_type: str = Query('total', description="필터 타입 (total/domestic/foreign/sector/sector_group)"),
+    sector: Optional[str] = Query(None, description="섹터명 (filter_type이 'sector'일 때 필수)"),
+    current_user_id: str = Depends(get_current_user),
+    portfolio_service: PortfolioService = Depends(get_portfolio_service)
+):
+    """
+    투자 비중 정보를 조회합니다.
+    
+    필터 타입:
+    - **total**: 전체 포트폴리오
+    - **domestic**: 국내 주식만
+    - **foreign**: 해외 주식만
+    - **sector**: 특정 섹터별 (sector 파라미터 필수)
+    - **sector_group**: 섹터별로 그룹화하여 표시
+    
+    응답 정보:
+    - 총 투자금액 (KRW 기준)
+    - 종목별 투자금액 및 투자 비중(%) - filter_type이 sector_group이 아닌 경우
+    - 섹터별 투자금액 및 투자 비중(%) - filter_type이 sector_group인 경우
+    - 투자 비중 기준 내림차순 정렬
+    
+    * 해외 주식의 경우 현재 환율을 적용하여 KRW로 환산합니다.
+    """
+    try:
+        # filter_type 유효성 검사
+        valid_filter_types = ['total', 'domestic', 'foreign', 'sector', 'sector_group']
+        if filter_type not in valid_filter_types:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid filter_type. Must be one of: {', '.join(valid_filter_types)}"
+            )
+        
+        # sector 필터일 때 sector 파라미터 필수
+        if filter_type == 'sector' and not sector:
+            raise HTTPException(
+                status_code=400,
+                detail="sector parameter is required when filter_type is 'sector'"
+            )
+        
+        weight_data = portfolio_service.get_investment_weights(
+            user_id=current_user_id,
+            filter_type=filter_type,
+            sector=sector
+        )
+        
+        response = InvestmentWeightResponse(
+            filter_type=weight_data['filter_type'],
+            sector_name=weight_data.get('sector_name'),
+            total_invested_amount=weight_data['total_invested_amount'],
+            total_current_value=weight_data['total_current_value'],
+            total_profit_loss=weight_data['total_profit_loss'],
+            total_profit_loss_rate=weight_data['total_profit_loss_rate'],
+            items=weight_data.get('items'),
+            sector_items=weight_data.get('sector_items')
+        )
+        
+        return create_response(response.model_dump(), message="투자 비중 조회 성공")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"투자 비중 조회 실패: {str(e)}")
 
 
 
