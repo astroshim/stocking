@@ -98,18 +98,24 @@ class OrderRepository(BaseRepository):
             )
         ).count()
 
-    def get_order_history(
+    def get_orders_unified(
         self,
         user_id: str,
         page: int = 1,
         size: int = 20,
+        status: Optional[OrderStatus] = None,
+        order_type: Optional[OrderType] = None,
+        stock_id: Optional[str] = None,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        end_date: Optional[datetime] = None,
+        history_only: bool = False
     ) -> List[Order]:
-        """주문 이력을 조회합니다."""
-        query = self.session.query(Order).filter(
-            and_(
-                Order.user_id == user_id,
+        """통합된 주문 조회 메서드"""
+        query = self.session.query(Order).filter(Order.user_id == user_id)
+        
+        # history_only가 True면 완료된 주문만 필터링
+        if history_only:
+            query = query.filter(
                 or_(
                     Order.order_status == OrderStatus.FILLED,
                     Order.order_status == OrderStatus.CANCELLED,
@@ -117,8 +123,14 @@ class OrderRepository(BaseRepository):
                     Order.order_status == OrderStatus.EXPIRED
                 )
             )
-        )
         
+        # 기존 필터들 적용
+        if status:
+            query = query.filter(Order.order_status == status)
+        if order_type:
+            query = query.filter(Order.order_type == order_type)
+        if stock_id:
+            query = query.filter(Order.product_code == stock_id)
         if start_date:
             query = query.filter(Order.created_at >= start_date)
         if end_date:
@@ -126,17 +138,23 @@ class OrderRepository(BaseRepository):
         
         offset = (page - 1) * size
         return query.order_by(desc(Order.created_at)).offset(offset).limit(size).all()
-
-    def count_order_history(
+    
+    def count_orders_unified(
         self,
         user_id: str,
+        status: Optional[OrderStatus] = None,
+        order_type: Optional[OrderType] = None,
+        stock_id: Optional[str] = None,
         start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
+        end_date: Optional[datetime] = None,
+        history_only: bool = False
     ) -> int:
-        """주문 이력 개수를 조회합니다."""
-        query = self.session.query(Order).filter(
-            and_(
-                Order.user_id == user_id,
+        """통합된 주문 개수 조회 메서드"""
+        query = self.session.query(Order).filter(Order.user_id == user_id)
+        
+        # history_only가 True면 완료된 주문만 필터링
+        if history_only:
+            query = query.filter(
                 or_(
                     Order.order_status == OrderStatus.FILLED,
                     Order.order_status == OrderStatus.CANCELLED,
@@ -144,8 +162,14 @@ class OrderRepository(BaseRepository):
                     Order.order_status == OrderStatus.EXPIRED
                 )
             )
-        )
         
+        # 기존 필터들 적용
+        if status:
+            query = query.filter(Order.order_status == status)
+        if order_type:
+            query = query.filter(Order.order_type == order_type)
+        if stock_id:
+            query = query.filter(Order.product_code == stock_id)
         if start_date:
             query = query.filter(Order.created_at >= start_date)
         if end_date:

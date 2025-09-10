@@ -143,6 +143,48 @@ class OrderService:
         
         return self._create_paginated_response(orders, total, page, size)
 
+    def get_orders_unified(
+        self,
+        user_id: str,
+        page: int = 1,
+        size: int = 20,
+        status: Optional[OrderStatus] = None,
+        order_type: Optional[OrderType] = None,
+        stock_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        history_only: bool = False
+    ) -> Dict[str, Any]:
+        """
+        통합된 주문 조회 메서드
+        
+        Args:
+            history_only: True면 완료된 주문만, False면 모든 주문
+        """
+        orders = self.order_repository.get_orders_unified(
+            user_id=user_id,
+            page=page,
+            size=size,
+            status=status,
+            order_type=order_type,
+            stock_id=stock_id,
+            start_date=start_date,
+            end_date=end_date,
+            history_only=history_only
+        )
+        
+        total = self.order_repository.count_orders_unified(
+            user_id=user_id,
+            status=status,
+            order_type=order_type,
+            stock_id=stock_id,
+            start_date=start_date,
+            end_date=end_date,
+            history_only=history_only
+        )
+
+        return self._create_paginated_response(orders, total, page, size)
+
     def get_order_by_id(self, user_id: str, order_id: str) -> Order:
         """특정 주문을 조회합니다."""
         order = self.order_repository.get_by_user_and_id(user_id, order_id)
@@ -214,19 +256,6 @@ class OrderService:
         
         return self._create_paginated_response(orders, total, page, size)
 
-    def get_order_history(
-        self,
-        user_id: str,
-        page: int = 1,
-        size: int = 20,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
-    ) -> Dict[str, Any]:
-        """주문 이력을 조회합니다."""
-        orders = self.order_repository.get_order_history(user_id, page, size, start_date, end_date)
-        total = self.order_repository.count_order_history(user_id, start_date, end_date)
-
-        return self._create_paginated_response(orders, total, page, size)
 
     def _validate_order(self, order_data: Dict[str, Any]) -> None:
         """
