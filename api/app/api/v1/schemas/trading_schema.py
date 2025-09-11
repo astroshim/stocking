@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
@@ -108,123 +108,67 @@ class TransactionSearchRequest(BaseModel):
     max_amount: Optional[Decimal] = Field(None, description="최대 거래금액")
 
 
-class TradingStatisticsResponse(InitVarModel):
-    id: str
-    user_id: str
-    period_type: str
-    period_start: datetime
-    period_end: datetime
-    total_trades: Decimal
-    buy_trades: Decimal
-    sell_trades: Decimal
-    total_buy_amount: Decimal
-    total_sell_amount: Decimal
-    total_commission: Decimal
-    total_tax: Decimal
-    realized_profit_loss: Decimal
-    win_trades: Decimal
-    loss_trades: Decimal
-    win_rate: Decimal
-    portfolio_value_start: Decimal
-    portfolio_value_end: Decimal
-    portfolio_return: Decimal
-    created_at: datetime
-    updated_at: datetime
+class DailyStockProfitLossItem(InitVarModel):
+    """일별 종목 실현 손익 항목"""
+    date: str = Field(..., description="날짜 (YYYY-MM-DD)")
+    stock_id: str = Field(..., description="종목 코드")
+    stock_name: Optional[str] = Field(None, description="종목명")
+    realized_profit_loss: float = Field(..., description="실현 손익 (원)")
+    trade_count: int = Field(..., description="거래 횟수")
+    total_sell_quantity: int = Field(..., description="총 매도 수량")
+    avg_sell_price: float = Field(..., description="평균 매도가")
+    transaction_ids: Optional[List[str]] = Field(None, description="거래 ID 목록")
+    # 환율 관련 손익 (해외 주식만 해당)
+    price_profit_loss: Optional[float] = Field(None, description="가격 차익 (원)")
+    exchange_profit_loss: Optional[float] = Field(None, description="환율 차익 (원)")
+    avg_purchase_exchange_rate: Optional[float] = Field(None, description="평균 매수 환율")
+    avg_current_exchange_rate: Optional[float] = Field(None, description="평균 매도 시점 환율")
 
 
-class TradingPerformanceResponse(BaseModel):
-    """거래 성과 분석"""
-    period: str = Field(..., description="분석 기간")
-    total_return: Decimal = Field(..., description="총 수익률")
-    annualized_return: Decimal = Field(..., description="연환산 수익률")
-    volatility: Decimal = Field(..., description="변동성")
-    sharpe_ratio: Decimal = Field(..., description="샤프 비율")
-    max_drawdown: Decimal = Field(..., description="최대 낙폭")
-    win_rate: Decimal = Field(..., description="승률")
-    profit_factor: Decimal = Field(..., description="수익 팩터")
-    average_win: Decimal = Field(..., description="평균 수익")
-    average_loss: Decimal = Field(..., description="평균 손실")
+class DailyProfitLossItem(InitVarModel):
+    """일별 실현 손익 항목"""
+    date: str = Field(..., description="날짜 (YYYY-MM-DD)")
+    total_realized_profit_loss: float = Field(..., description="일별 총 실현 손익")
+    trade_count: int = Field(..., description="일별 총 거래 횟수")
+    stock_details: List[DailyStockProfitLossItem] = Field(..., description="종목별 상세")
 
 
-class MonthlyPerformanceResponse(BaseModel):
-    """월별 성과"""
-    year: int
-    month: int
-    return_rate: Decimal
-    trades_count: int
-    profit_loss: Decimal
+class PeriodRealizedProfitLossResponse(InitVarModel):
+    """기간별 실현 손익 응답 (일/주/월/년/전체)"""
+    period_type: str = Field(..., description="기간 타입 (day/week/month/year/all)")
+    period_value: Optional[str] = Field(None, description="기간 값 (예: 2024-09-10, 2024-09-2, 2024-09, 2024)")
+    total_realized_profit_loss: float = Field(..., description="총 실현 손익")
+    total_trades: int = Field(..., description="총 거래 횟수")
+    total_profit_loss_rate: Optional[float] = Field(None, description="총 수익률 (%)")
+    total_invested_amount: Optional[float] = Field(None, description="총 투자금액 (매도 원가)")
+    daily_breakdown: List[DailyProfitLossItem] = Field(..., description="일별 상세 데이터")
 
 
-class TradingDashboardResponse(BaseModel):
-    """거래 대시보드 데이터"""
-    account_summary: dict = Field(..., description="계좌 요약")
-    recent_transactions: List[TransactionResponse] = Field(..., description="최근 거래내역")
-    portfolio_summary: dict = Field(..., description="포트폴리오 요약")
-    performance_metrics: TradingPerformanceResponse = Field(..., description="성과 지표")
-    monthly_performance: List[MonthlyPerformanceResponse] = Field(..., description="월별 성과")
-    top_gainers: List[dict] = Field(..., description="상위 수익 종목")
-    top_losers: List[dict] = Field(..., description="상위 손실 종목")
+class StockRealizedProfitLossItem(InitVarModel):
+    """종목별 실현 손익 항목"""
+    stock_id: str = Field(..., description="종목 코드")
+    stock_name: str = Field(..., description="종목명")
+    total_realized_profit_loss: float = Field(..., description="총 실현 손익")
+    total_trades: int = Field(..., description="총 거래 횟수")
+    total_sell_quantity: int = Field(..., description="총 매도 수량")
+    avg_profit_per_trade: float = Field(..., description="거래당 평균 수익")
+    profit_loss_rate: Optional[float] = Field(None, description="수익률 (%)")
+    total_invested_amount: Optional[float] = Field(None, description="총 투자금액 (매도 원가)")
+    first_trade_date: str = Field(..., description="첫 거래일")
+    last_trade_date: str = Field(..., description="마지막 거래일")
+    # 환율 관련 손익 (해외 주식만 해당)
+    total_price_profit_loss: Optional[float] = Field(None, description="총 가격 차익 (원)")
+    total_exchange_profit_loss: Optional[float] = Field(None, description="총 환율 차익 (원)")
+    avg_purchase_exchange_rate: Optional[float] = Field(None, description="평균 매수 환율")
+    avg_current_exchange_rate: Optional[float] = Field(None, description="평균 매도 시점 환율")
 
 
-class MarketDataResponse(BaseModel):
-    """시장 데이터"""
-    market_indices: List[dict] = Field(..., description="시장 지수")
-    market_news: List[dict] = Field(..., description="시장 뉴스")
-    trending_stocks: List[dict] = Field(..., description="인기 종목")
-    sector_performance: List[dict] = Field(..., description="섹터별 성과")
-
-
-class OrderBookResponse(BaseModel):
-    """호가창 정보"""
-    stock_id: str
-    timestamp: datetime
-    bid_orders: List[dict] = Field(..., description="매수 호가")
-    ask_orders: List[dict] = Field(..., description="매도 호가")
-    
-    
-class TradingSignalResponse(BaseModel):
-    """매매 신호"""
-    stock_id: str
-    signal_type: str  # BUY, SELL, HOLD
-    confidence: Decimal  # 0-100
-    price_target: Optional[Decimal]
-    stop_loss: Optional[Decimal]
-    reasoning: str
-    generated_at: datetime
-
-
-class RiskAssessmentResponse(BaseModel):
-    """리스크 평가"""
-    portfolio_risk_score: Decimal = Field(..., description="포트폴리오 리스크 점수 (1-10)")
-    concentration_risk: Decimal = Field(..., description="집중도 리스크")
-    sector_exposure: dict = Field(..., description="섹터별 노출도")
-    volatility_risk: Decimal = Field(..., description="변동성 리스크")
-    liquidity_risk: Decimal = Field(..., description="유동성 리스크")
-    recommendations: List[str] = Field(..., description="리스크 개선 권장사항")
-
-
-class BacktestRequest(BaseModel):
-    """백테스팅 요청"""
-    strategy_name: str = Field(..., description="전략명")
-    start_date: datetime = Field(..., description="시작일")
-    end_date: datetime = Field(..., description="종료일")
-    initial_capital: Decimal = Field(..., description="초기 자본")
-    stocks: List[str] = Field(..., description="대상 종목 리스트")
-    parameters: dict = Field(..., description="전략 파라미터")
-
-
-class BacktestResponse(BaseModel):
-    """백테스팅 결과"""
-    strategy_name: str
-    period: str
-    initial_capital: Decimal
-    final_capital: Decimal
-    total_return: Decimal
-    annualized_return: Decimal
-    max_drawdown: Decimal
-    sharpe_ratio: Decimal
-    win_rate: Decimal
-    total_trades: int
-    daily_returns: List[dict]
-    trade_history: List[dict]
-    equity_curve: List[dict]
+class StockRealizedProfitLossResponse(InitVarModel):
+    """종목별 실현 손익 응답"""
+    period_type: str = Field(..., description="기간 타입 (day/week/month/year/all)")
+    period_value: Optional[str] = Field(None, description="기간 값")
+    total_realized_profit_loss: float = Field(..., description="총 실현 손익")
+    total_trades: int = Field(..., description="총 거래 횟수")
+    total_profit_loss_rate: Optional[float] = Field(None, description="총 수익률 (%)")
+    total_invested_amount: Optional[float] = Field(None, description="총 투자금액 (매도 원가)")
+    stocks: List[StockRealizedProfitLossItem] = Field(..., description="종목별 데이터")

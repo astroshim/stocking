@@ -59,6 +59,12 @@ class Transaction(UUIDMixin, Base):
     # 실현손익 (매도 거래에 한해 기록)
     realized_profit_loss = Column(Numeric(20, 8), nullable=True, comment='실현 손익 (현지통화)')
     krw_realized_profit_loss = Column(Numeric(20, 2), nullable=True, comment='원화 환산 실현 손익')
+    
+    # 환율 관련 손익 (해외자산 매도시 기록)
+    purchase_average_exchange_rate = Column(Numeric(10, 4), nullable=True, comment='매도시점의 평균 매수 환율')
+    current_exchange_rate = Column(Numeric(10, 4), nullable=True, comment='매도 시점 환율')
+    exchange_profit_loss = Column(Numeric(20, 2), nullable=True, comment='환율 차익 (원)')
+    price_profit_loss = Column(Numeric(20, 2), nullable=True, comment='가격 차익 (원)')
 
     # 관계 설정
     user = relationship('User', back_populates='transactions')

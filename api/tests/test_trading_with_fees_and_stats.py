@@ -108,23 +108,5 @@ def test_sell_with_commission_and_tax(session):
     assert tx.tax == Decimal('1000')
 
 
-def test_daily_trading_statistics(session):
-    user = create_user_with_balance(session, Decimal('1000000'))
-
-    order_repo = OrderRepository(session)
-    vb_repo = VirtualBalanceRepository(session)
-    service = OrderService(order_repo, vb_repo, FakeTossProxyService())
-    ts = TransactionService(session)
-
-    order = service.create_order(user.id, {
-        'stock_id': 'stat001',
-        'order_type': __import__('app.db.models.order', fromlist=['OrderType']).OrderType.BUY,
-        'order_method': __import__('app.db.models.order', fromlist=['OrderMethod']).OrderMethod.LIMIT,
-        'quantity': Decimal('5'),
-        'order_price': Decimal('10000')
-    })
-    execute(service, order_repo, order.id, Decimal('10000'))
-
-    ts.update_daily_statistics(user.id)
 
 

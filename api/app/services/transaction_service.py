@@ -2,6 +2,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 from decimal import Decimal
 from datetime import datetime, timedelta
+from collections import defaultdict
 import calendar
 
 from app.db.repositories.transaction_repository import TransactionRepository, TradingStatisticsRepository
@@ -233,181 +234,422 @@ class TransactionService:
             'krw_realized_profit_loss': float(getattr(transaction, 'krw_realized_profit_loss', 0)) if getattr(transaction, 'krw_realized_profit_loss', None) is not None else None,
         }
 
-    def update_daily_statistics(self, user_id: str, as_of: Optional[datetime] = None) -> None:
-        """일별 거래 통계 생성/업데이트 (간략 구현)"""
-        if as_of is None:
-            as_of = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        period_start = as_of
-        period_end = as_of.replace(hour=23, minute=59, second=59, microsecond=999999)
-
-        summary = self.transaction_repository.get_trading_summary(user_id=user_id, period_days=1)
-        statistics_data = {
-            'total_trades': summary['total_transactions'],
-            'buy_trades': 0,
-            'sell_trades': 0,
-            'total_buy_amount': summary['total_buy_amount'],
-            'total_sell_amount': summary['total_sell_amount'],
-            'total_commission': summary['total_commission'],
-            'total_tax': summary['total_tax'],
-            'realized_profit_loss': summary['net_amount'],
-            'win_trades': 0,
-            'loss_trades': 0,
-            'win_rate': 0,
-            'portfolio_value_start': 0,
-            'portfolio_value_end': 0,
-            'portfolio_return': 0
-        }
-
-        self.trading_stats_repo.create_or_update_statistics(
-            user_id=user_id,
-            period_type='daily',
-            period_start=period_start,
-            period_end=period_end,
-            statistics_data=statistics_data
-        )
-
-    def get_trading_statistics(
-        self,
-        user_id: str,
-        period_type: str = "monthly",
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None
-    ) -> List[Dict[str, Any]]:
-        """거래 통계 조회"""
-        # 실시간 통계 계산 (실제로는 배치로 미리 계산된 통계를 조회)
+    def _parse_period_dates(self, period_type: str, period_value: Optional[str] = None) -> tuple[datetime, datetime]:
+        """
+        기간 타입과 값을 파싱하여 시작일과 종료일을 반환합니다.
         
-        if period_type == "monthly":
-            return self._get_monthly_statistics(user_id, start_date, end_date)
-        elif period_type == "yearly":
-            return self._get_yearly_statistics(user_id, start_date, end_date)
+        Args:
+            period_type: 기간 타입 (day/week/month/year/all)
+            period_value: 기간 값 (예: 2024-09-10, 2024-10-2, 2024-09, 2024)
+        
+        Returns:
+            tuple[datetime, datetime]: (시작일, 종료일)
+        """
+        if period_type == 'day':
+            # 특정 날짜 (예: 2024-09-10)
+            if not period_value:
+                raise ValueError("day 타입은 period_value가 필요합니다 (형식: YYYY-MM-DD)")
+            start_date = datetime.strptime(period_value, "%Y-%m-%d")
+            end_date = start_date.replace(hour=23, minute=59, second=59)
+            
+        elif period_type == 'week':
+            # 특정 주 (예: 2024-10-2 => 2024년 10월 2주)
+            if not period_value:
+                raise ValueError("week 타입은 period_value가 필요합니다 (형식: YYYY-MM-W)")
+            try:
+                parts = period_value.split('-')
+                if len(parts) != 3:
+                    raise ValueError("잘못된 주차 형식입니다. YYYY-MM-W 형식을 사용하세요")
+                
+                year = int(parts[0])
+                month = int(parts[1])
+                week_of_month = int(parts[2])
+                
+                if month < 1 or month > 12:
+                    raise ValueError("월은 1-12 사이여야 합니다")
+                if week_of_month < 1 or week_of_month > 5:
+                    raise ValueError("주차는 1-5 사이여야 합니다")
+                
+                # 해당 월의 첫째 날
+                first_day = datetime(year, month, 1)
+                # 첫째 날의 요일 (0=월요일, 6=일요일)
+                first_weekday = first_day.weekday()
+                
+                # 해당 월의 첫 번째 주 시작일 (월요일 기준)
+                first_monday = first_day - timedelta(days=first_weekday)
+                
+                # 지정된 주차의 시작일 (월요일)
+                start_date = first_monday + timedelta(weeks=week_of_month-1)
+                end_date = start_date + timedelta(days=6, hours=23, minutes=59, seconds=59)
+                
+                # 해당 월 범위를 벗어나지 않도록 조정
+                month_start = datetime(year, month, 1)
+                last_day = calendar.monthrange(year, month)[1]
+                month_end = datetime(year, month, last_day, 23, 59, 59)
+                
+                # 시작일이 해당 월보다 이전이면 월 시작일로 조정
+                if start_date < month_start:
+                    start_date = month_start
+                # 종료일이 해당 월보다 이후면 월 종료일로 조정
+                if end_date > month_end:
+                    end_date = month_end
+                    
+            except (ValueError, IndexError) as e:
+                raise ValueError(f"잘못된 주차 형식입니다: {str(e)}. YYYY-MM-W 형식을 사용하세요 (예: 2024-10-2)")
+            
+        elif period_type == 'month':
+            # 특정 월 (예: 2024-09)
+            if not period_value:
+                raise ValueError("month 타입은 period_value가 필요합니다 (형식: YYYY-MM)")
+            year, month = period_value.split('-')
+            year = int(year)
+            month = int(month)
+            start_date = datetime(year, month, 1)
+            last_day = calendar.monthrange(year, month)[1]
+            end_date = datetime(year, month, last_day, 23, 59, 59)
+            
+        elif period_type == 'year':
+            # 특정 년도 (예: 2024)
+            if not period_value:
+                raise ValueError("year 타입은 period_value가 필요합니다 (형식: YYYY)")
+            year = int(period_value)
+            start_date = datetime(year, 1, 1)
+            end_date = datetime(year, 12, 31, 23, 59, 59)
+            
+        elif period_type == 'all':
+            # 전체 기간
+            start_date = datetime(2020, 1, 1)  # 충분히 과거 날짜
+            end_date = datetime.now()
+            
         else:
-            # 기본적으로 거래 요약 반환
-            summary = self.transaction_repository.get_trading_summary(user_id, 30)
-            return [summary]
-
-    def _get_monthly_statistics(self, user_id: str, start_date: Optional[datetime], end_date: Optional[datetime]) -> List[Dict[str, Any]]:
-        """월별 통계"""
-        year = end_date.year if end_date else datetime.now().year
-        return self.transaction_repository.get_monthly_summary(user_id, year)
-
-    def _get_yearly_statistics(self, user_id: str, start_date: Optional[datetime], end_date: Optional[datetime]) -> List[Dict[str, Any]]:
-        """연별 통계"""
-        # 간단한 연별 통계 구현
-        current_year = datetime.now().year
-        years = range(current_year - 4, current_year + 1)  # 최근 5년
+            raise ValueError("Invalid period_type. Use 'day', 'week', 'month', 'year', or 'all'")
         
-        yearly_stats = []
-        for year in years:
-            year_start = datetime(year, 1, 1)
-            year_end = datetime(year, 12, 31, 23, 59, 59)
+        return start_date, end_date
+
+    def _calculate_profit_loss_rate(self, realized_profit_loss: float, sell_amount: float) -> tuple[float, float]:
+        """
+        수익률과 투자금액을 계산합니다.
+        
+        Args:
+            realized_profit_loss: 실현 손익
+            sell_amount: 매도 금액
+        
+        Returns:
+            tuple[float, float]: (수익률(%), 투자금액)
+        """
+        # 투자금액 = 매도금액 - 실현손익
+        invested_amount = sell_amount - realized_profit_loss if sell_amount > 0 else 0
+        
+        # 수익률 = (실현손익 / 투자금액) * 100
+        profit_loss_rate = (realized_profit_loss / invested_amount * 100) if invested_amount > 0 else 0
+        
+        return round(profit_loss_rate, 2), invested_amount
+
+    def _get_stock_type_filter(self, stock_type: str):
+        """
+        주식 유형에 따른 필터 조건을 반환합니다.
+        
+        Args:
+            stock_type: 주식 유형 ('domestic', 'foreign', 'total')
+        
+        Returns:
+            SQLAlchemy filter condition or None
+        """
+        if stock_type == 'domestic':
+            # 국내주식: A로 시작하는 종목 코드
+            return Transaction.stock_id.like('A%')
+        elif stock_type == 'foreign':
+            # 해외주식: US, NAS로 시작하는 종목 코드
+            return Transaction.stock_id.regexp('^(US|NAS)')
+        elif stock_type == 'total':
+            # 전체: 필터 없음
+            return None
+        else:
+            raise ValueError("Invalid stock_type. Use 'domestic', 'foreign', or 'total'")
+
+    def get_period_realized_profit_loss(self, user_id: str, period_type: str, 
+                                       period_value: Optional[str] = None, 
+                                       stock_type: str = 'total') -> Dict[str, Any]:
+        """
+        특정 기간의 실현 손익을 조회합니다 (일별 상세 포함).
+        
+        Args:
+            user_id: 사용자 ID
+            period_type: 기간 타입 (day/week/month/year/all)
+            period_value: 기간 값 (예: 2024-09-10, 2024-10-2, 2024-09, 2024)
+            stock_type: 주식 유형 ('domestic', 'foreign', 'total')
+        
+        Returns:
+            기간별 실현 손익 데이터 (일별 상세 포함)
+        """
+        from sqlalchemy import func
+        from app.db.models.transaction import Transaction, TransactionType
+        from collections import defaultdict
+        
+        # 기간 파싱
+        start_date, end_date = self._parse_period_dates(period_type, period_value)
+        
+        # 주식 유형 필터
+        stock_type_filter = self._get_stock_type_filter(stock_type)
+        
+        # 1. 일별 집계 데이터 조회 (DB에서 그룹화)
+        daily_summary_query = self.db.query(
+            func.date(Transaction.transaction_date).label('date'),
+            func.sum(Transaction.krw_realized_profit_loss).label('total_pnl'),
+            func.count(Transaction.id).label('trade_count')
+        ).filter(
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.SELL,
+            Transaction.krw_realized_profit_loss.isnot(None),
+            Transaction.transaction_date >= start_date,
+            Transaction.transaction_date <= end_date
+        )
+        
+        # 주식 유형 필터 적용
+        if stock_type_filter is not None:
+            daily_summary_query = daily_summary_query.filter(stock_type_filter)
             
-            # 해당 연도 거래 요약
-            transactions = self.transaction_repository.get_by_user_id(
-                user_id=user_id,
-                start_date=year_start,
-                end_date=year_end
-            )
+        daily_summary = daily_summary_query.group_by(
+            func.date(Transaction.transaction_date)
+        ).order_by(
+            func.date(Transaction.transaction_date)
+        ).all()
+        
+        # 2. 일별-종목별 상세 데이터 조회 (DB에서 그룹화)
+        daily_stock_details_query = self.db.query(
+            func.date(Transaction.transaction_date).label('date'),
+            Transaction.stock_id,
+            func.sum(Transaction.krw_realized_profit_loss).label('stock_pnl'),
+            func.count(Transaction.id).label('stock_trades'),
+            func.sum(Transaction.quantity).label('total_quantity'),
+            func.avg(Transaction.price).label('avg_price'),
+            func.group_concat(Transaction.id).label('transaction_ids'),  # MySQL용 GROUP_CONCAT
+            # 환율 관련 컬럼 추가
+            func.sum(Transaction.price_profit_loss).label('price_profit_loss'),
+            func.sum(Transaction.exchange_profit_loss).label('exchange_profit_loss'),
+            func.avg(Transaction.purchase_average_exchange_rate).label('avg_purchase_rate'),
+            func.avg(Transaction.current_exchange_rate).label('avg_current_rate')
+        ).filter(
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.SELL,
+            Transaction.krw_realized_profit_loss.isnot(None),
+            Transaction.transaction_date >= start_date,
+            Transaction.transaction_date <= end_date
+        )
+        
+        # 주식 유형 필터 적용
+        if stock_type_filter is not None:
+            daily_stock_details_query = daily_stock_details_query.filter(stock_type_filter)
             
-            buy_amount = sum(t.amount for t in transactions if t.transaction_type == TransactionType.BUY)
-            sell_amount = sum(t.amount for t in transactions if t.transaction_type == TransactionType.SELL)
-            total_commission = sum(t.commission for t in transactions)
-            total_tax = sum(t.tax for t in transactions)
+        daily_stock_details = daily_stock_details_query.group_by(
+            func.date(Transaction.transaction_date),
+            Transaction.stock_id
+        ).order_by(
+            func.date(Transaction.transaction_date),
+            Transaction.stock_id
+        ).all()
+        
+        # 3. 전체 기간 집계 (투자금액 계산을 위해 추가 정보 조회)
+        total_summary_query = self.db.query(
+            func.sum(Transaction.krw_realized_profit_loss).label('total_pnl'),
+            func.count(Transaction.id).label('total_trades'),
+            func.sum(Transaction.quantity * Transaction.price).label('total_sell_amount'),
+            func.sum(Transaction.quantity).label('total_quantity')
+        ).filter(
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.SELL,
+            Transaction.krw_realized_profit_loss.isnot(None),
+            Transaction.transaction_date >= start_date,
+            Transaction.transaction_date <= end_date
+        )
+        
+        # 주식 유형 필터 적용
+        if stock_type_filter is not None:
+            total_summary_query = total_summary_query.filter(stock_type_filter)
             
-            yearly_stats.append({
-                'year': year,
-                'buy_amount': float(buy_amount),
-                'sell_amount': float(sell_amount),
-                'net_amount': float(sell_amount - buy_amount),
-                'total_commission': float(total_commission),
-                'total_tax': float(total_tax),
-                'transaction_count': len(transactions)
+        total_summary = total_summary_query.first()
+        
+        # 데이터 구조화
+        daily_breakdown = []
+        stock_details_by_date = defaultdict(list)
+        
+        # 일별-종목별 상세를 날짜별로 그룹화
+        for detail in daily_stock_details:
+            date_str = detail.date.strftime("%Y-%m-%d") if hasattr(detail.date, 'strftime') else str(detail.date)
+            # transaction_ids 파싱 (GROUP_CONCAT 결과는 콤마로 구분된 문자열)
+            transaction_ids = detail.transaction_ids.split(',') if detail.transaction_ids else []
+            
+            stock_detail = {
+                'date': date_str,
+                'stock_id': detail.stock_id,
+                'stock_name': f"주식 {detail.stock_id}" if detail.stock_id else "알 수 없음",
+                'realized_profit_loss': float(detail.stock_pnl or 0),
+                'trade_count': int(detail.stock_trades or 0),
+                'total_sell_quantity': int(detail.total_quantity or 0),
+                'avg_sell_price': float(detail.avg_price or 0),
+                'transaction_ids': transaction_ids
+            }
+            
+            # 환율 관련 정보가 있는 경우에만 추가 (해외 주식)
+            if detail.price_profit_loss is not None:
+                stock_detail['price_profit_loss'] = float(detail.price_profit_loss or 0)
+            if detail.exchange_profit_loss is not None:
+                stock_detail['exchange_profit_loss'] = float(detail.exchange_profit_loss or 0)
+            if detail.avg_purchase_rate is not None:
+                stock_detail['avg_purchase_exchange_rate'] = float(detail.avg_purchase_rate or 0)
+            if detail.avg_current_rate is not None:
+                stock_detail['avg_current_exchange_rate'] = float(detail.avg_current_rate or 0)
+            
+            stock_details_by_date[date_str].append(stock_detail)
+        
+        # 일별 요약과 상세 결합
+        for day in daily_summary:
+            date_str = day.date.strftime("%Y-%m-%d") if hasattr(day.date, 'strftime') else str(day.date)
+            daily_breakdown.append({
+                'date': date_str,
+                'total_realized_profit_loss': float(day.total_pnl or 0),
+                'trade_count': int(day.trade_count or 0),
+                'stock_details': stock_details_by_date.get(date_str, [])
             })
         
-        return yearly_stats
-
-    def get_trading_performance(self, user_id: str, period: str = "1Y") -> Dict[str, Any]:
-        """거래 성과 분석"""
-        # 기간 계산
-        end_date = datetime.now()
-        if period == "1M":
-            start_date = end_date - timedelta(days=30)
-        elif period == "3M":
-            start_date = end_date - timedelta(days=90)
-        elif period == "6M":
-            start_date = end_date - timedelta(days=180)
-        elif period == "1Y":
-            start_date = end_date - timedelta(days=365)
-        else:  # ALL
-            start_date = datetime(2020, 1, 1)  # 임의의 과거 날짜
+        # 수익률 계산
+        total_pnl = float(total_summary.total_pnl or 0) if total_summary else 0
+        total_sell_amount = float(total_summary.total_sell_amount or 0) if total_summary else 0
         
-        # 거래 요약
-        summary = self.transaction_repository.get_trading_summary(user_id, (end_date - start_date).days)
-        
-        # 포트폴리오 요약
-        portfolio_summary = self.portfolio_repository.get_portfolio_summary(user_id)
-        
-        # 성과 지표 계산 (간단한 버전)
-        total_invested = summary['total_buy_amount']
-        total_return = summary['net_amount']
-        total_return_rate = (total_return / total_invested * 100) if total_invested > 0 else 0
+        profit_loss_rate, total_invested = self._calculate_profit_loss_rate(total_pnl, total_sell_amount)
         
         return {
-            'period': period,
-            'total_return': float(total_return),
-            'total_return_rate': float(total_return_rate),
-            'annualized_return': float(total_return_rate),  # 간단히 동일값 사용
-            'volatility': 15.0,  # 임시 값
-            'sharpe_ratio': 1.2,  # 임시 값
-            'max_drawdown': -10.0,  # 임시 값
-            'win_rate': 60.0,  # 임시 값
-            'profit_factor': 1.5,  # 임시 값
-            'average_win': 50000.0,  # 임시 값
-            'average_loss': -30000.0,  # 임시 값
-            'total_trades': summary['total_transactions'],
-            'total_invested': float(total_invested),
-            'current_portfolio_value': float(portfolio_summary['total_current_value'])
+            'period_type': period_type,
+            'period_value': period_value,
+            'total_realized_profit_loss': total_pnl,
+            'total_trades': int(total_summary.total_trades or 0) if total_summary else 0,
+            'total_profit_loss_rate': profit_loss_rate,
+            'total_invested_amount': total_invested,
+            'daily_breakdown': daily_breakdown
         }
-
-    def get_trading_dashboard(self, user_id: str) -> Dict[str, Any]:
-        """거래 대시보드 데이터"""
-        # 계좌 요약
-        virtual_balance = self.virtual_balance_repository.get_by_user_id(user_id)
-        portfolio_summary = self.portfolio_repository.get_portfolio_summary(user_id)
+    
+    def get_stock_realized_profit_loss(self, user_id: str, period_type: str, 
+                                      period_value: Optional[str] = None, 
+                                      stock_type: str = 'total') -> Dict[str, Any]:
+        """
+        특정 기간의 종목별 실현 손익을 조회합니다.
         
-        account_summary = {
-            'cash_balance': float(virtual_balance.cash_balance) if virtual_balance else 0.0,
-            'invested_amount': float(portfolio_summary['total_invested_amount']),
-            'total_asset_value': float(portfolio_summary['total_current_value']),
-            'total_profit_loss': float(portfolio_summary['total_profit_loss']),
-            'total_profit_loss_rate': float(portfolio_summary['total_profit_loss_rate'])
-        }
+        Args:
+            user_id: 사용자 ID
+            period_type: 기간 타입 (day/week/month/year/all)
+            period_value: 기간 값 (예: 2024-09-10, 2024-10-2, 2024-09, 2024)
+            stock_type: 주식 유형 ('domestic', 'foreign', 'total')
         
-        # 최근 거래내역 (5건)
-        recent_transactions_page = self.get_transactions(user_id, page=1, size=5)
-        recent_transactions = recent_transactions_page.items
+        Returns:
+            종목별 실현 손익 데이터
+        """
+        from sqlalchemy import func
+        from app.db.models.transaction import Transaction, TransactionType
         
-        # 성과 지표
-        performance_metrics = self.get_trading_performance(user_id, "1M")
+        # 기간 파싱
+        start_date, end_date = self._parse_period_dates(period_type, period_value)
         
-        # 월별 성과 (최근 12개월)
-        monthly_performance = self.transaction_repository.get_monthly_summary(user_id)
+        # 주식 유형 필터
+        stock_type_filter = self._get_stock_type_filter(stock_type)
         
-        # 상위 수익/손실 종목 (임시 구현)
-        top_gainers = []
-        top_losers = []
+        # 1. 종목별 집계 데이터 조회 (DB에서 그룹화)
+        stock_summary_query = self.db.query(
+            Transaction.stock_id,
+            func.sum(Transaction.krw_realized_profit_loss).label('total_pnl'),
+            func.count(Transaction.id).label('trade_count'),
+            func.sum(Transaction.quantity).label('total_quantity'),
+            func.sum(Transaction.quantity * Transaction.price).label('total_sell_amount'),
+            func.min(Transaction.transaction_date).label('first_date'),
+            func.max(Transaction.transaction_date).label('last_date'),
+            # 환율 관련 컬럼 추가
+            func.sum(Transaction.price_profit_loss).label('total_price_pnl'),
+            func.sum(Transaction.exchange_profit_loss).label('total_exchange_pnl'),
+            func.avg(Transaction.purchase_average_exchange_rate).label('avg_purchase_rate'),
+            func.avg(Transaction.current_exchange_rate).label('avg_current_rate')
+        ).filter(
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.SELL,
+            Transaction.krw_realized_profit_loss.isnot(None),
+            Transaction.transaction_date >= start_date,
+            Transaction.transaction_date <= end_date
+        )
+        
+        # 주식 유형 필터 적용
+        if stock_type_filter is not None:
+            stock_summary_query = stock_summary_query.filter(stock_type_filter)
+            
+        stock_summary = stock_summary_query.group_by(
+            Transaction.stock_id
+        ).order_by(
+            func.sum(Transaction.krw_realized_profit_loss).desc()  # 수익률 기준 정렬
+        ).all()
+        
+        # 2. 전체 기간 집계
+        total_summary_query = self.db.query(
+            func.sum(Transaction.krw_realized_profit_loss).label('total_pnl'),
+            func.count(Transaction.id).label('total_trades'),
+            func.sum(Transaction.quantity * Transaction.price).label('total_sell_amount')
+        ).filter(
+            Transaction.user_id == user_id,
+            Transaction.transaction_type == TransactionType.SELL,
+            Transaction.krw_realized_profit_loss.isnot(None),
+            Transaction.transaction_date >= start_date,
+            Transaction.transaction_date <= end_date
+        )
+        
+        # 주식 유형 필터 적용
+        if stock_type_filter is not None:
+            total_summary_query = total_summary_query.filter(stock_type_filter)
+            
+        total_summary = total_summary_query.first()
+        
+        # 종목별 데이터 구조화
+        stocks = []
+        for stock in stock_summary:
+            stock_pnl = float(stock.total_pnl or 0)
+            stock_trades = int(stock.trade_count or 0)
+            stock_sell_amount = float(stock.total_sell_amount or 0)
+            
+            # 수익률 계산
+            stock_profit_rate, stock_invested = self._calculate_profit_loss_rate(stock_pnl, stock_sell_amount)
+            
+            stock_data = {
+                'stock_id': stock.stock_id,
+                'stock_name': f"주식 {stock.stock_id}" if stock.stock_id else "알 수 없음",
+                'total_realized_profit_loss': stock_pnl,
+                'total_trades': stock_trades,
+                'total_sell_quantity': int(stock.total_quantity or 0),
+                'avg_profit_per_trade': stock_pnl / stock_trades if stock_trades > 0 else 0,
+                'profit_loss_rate': stock_profit_rate,
+                'total_invested_amount': stock_invested,
+                'first_trade_date': stock.first_date.strftime("%Y-%m-%d") if stock.first_date else "",
+                'last_trade_date': stock.last_date.strftime("%Y-%m-%d") if stock.last_date else ""
+            }
+            
+            # 환율 관련 정보가 있는 경우에만 추가 (해외 주식)
+            if stock.total_price_pnl is not None:
+                stock_data['total_price_profit_loss'] = float(stock.total_price_pnl or 0)
+            if stock.total_exchange_pnl is not None:
+                stock_data['total_exchange_profit_loss'] = float(stock.total_exchange_pnl or 0)
+            if stock.avg_purchase_rate is not None:
+                stock_data['avg_purchase_exchange_rate'] = float(stock.avg_purchase_rate or 0)
+            if stock.avg_current_rate is not None:
+                stock_data['avg_current_exchange_rate'] = float(stock.avg_current_rate or 0)
+            
+            stocks.append(stock_data)
+        
+        # 전체 수익률 계산
+        total_pnl = float(total_summary.total_pnl or 0) if total_summary else 0
+        total_sell_amount = float(total_summary.total_sell_amount or 0) if total_summary else 0
+        
+        total_profit_rate, total_invested = self._calculate_profit_loss_rate(total_pnl, total_sell_amount)
         
         return {
-            'account_summary': account_summary,
-            'recent_transactions': recent_transactions,
-            'portfolio_summary': {
-                'total_stocks': portfolio_summary['total_stocks'],
-                'total_invested_amount': float(portfolio_summary['total_invested_amount']),
-                'total_current_value': float(portfolio_summary['total_current_value']),
-                'total_profit_loss': float(portfolio_summary['total_profit_loss']),
-                'total_profit_loss_rate': float(portfolio_summary['total_profit_loss_rate'])
-            },
-            'performance_metrics': performance_metrics,
-            'monthly_performance': monthly_performance,
-            'top_gainers': top_gainers,
-            'top_losers': top_losers
+            'period_type': period_type,
+            'period_value': period_value,
+            'total_realized_profit_loss': total_pnl,
+            'total_trades': int(total_summary.total_trades or 0) if total_summary else 0,
+            'total_profit_loss_rate': total_profit_rate,
+            'total_invested_amount': total_invested,
+            'stocks': stocks
         }
